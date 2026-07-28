@@ -4,7 +4,7 @@ Multi-tenant sourdough service: starter management, live proofing predictions, b
 shareable recipes, flour inventory/costing, and XP + achievements + seasonal leaderboards —
 with reminders over Web Push, email, ntfy and in-app.
 
-Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 0 (scaffold) complete.**
+Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 1 (identity) complete.**
 
 ## Quick start
 
@@ -48,6 +48,7 @@ uvicorn app.main:app --reload
 sdt version              # application version
 sdt config               # resolved settings, secrets masked
 sdt check                # verify Postgres + Redis connectivity
+sdt create-admin         # create a pre-verified administrator account
 sdt db upgrade [rev]     # apply migrations (default: head)
 sdt db downgrade <rev>
 sdt db revision -m "..." # autogenerate a migration from model changes
@@ -72,3 +73,26 @@ ruff check . && ruff format --check . && mypy app
 - **Migrations are never auto-applied on boot** — run `alembic upgrade head` deliberately so a
   rolling deploy can't race itself.
 - **Media never passes through the API.** Clients presign against MinIO and upload directly.
+
+## Identity model (Phase 1)
+
+Endpoints live under `/api/v1/auth` and `/api/v1/profiles`; see `/docs` for the full schema.
+The properties worth knowing before changing this code:
+
+- **Access tokens are short-lived JWTs (15 min); refresh tokens are opaque, stored as SHA-256
+  hashes, and rotate on every use.** Replaying a spent refresh token revokes its entire
+  `family_id` — the legitimate client is signed out too, because the token demonstrably leaked.
+  That revocation is committed explicitly, since the request ends in a 401 and the session
+  dependency rolls back on exception.
+- **Registration never reveals whether an email is already in use.** Same status, same body
+  either way; the real owner instead receives a "someone tried to sign up" email. Handle
+  collisions *do* return 409 — handles are public. Login spends a dummy argon2 hash when no
+  user matches, so timing does not leak either.
+- **Suspension is checked per request**, not baked into the token, so it takes effect before
+  the current access token would expire.
+- **Profiles are private until published** (`is_public`); a private profile 404s exactly like a
+  missing one. Public profiles never include the email address.
+- **Rate limits** are Redis fixed-window, keyed by scope + client IP, and **fail open** — a
+  Redis outage must not lock everyone out of logging in.
+- `JWT_SECRET` must be ≥32 characters, and the app refuses to boot in `prod` with the shipped
+  dev default.

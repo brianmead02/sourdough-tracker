@@ -18,6 +18,10 @@ dependencies = [
     "redis>=5.2",
     "arq>=0.26",
     "typer>=0.15",
+    "argon2-cffi>=23.1",
+    "pyjwt>=2.10",
+    "email-validator>=2.2",
+    "aiosmtplib>=3.0",
 ]
 
 [project.optional-dependencies]

@@ -12,6 +12,9 @@ services:
     volumes:
       - ./app:/srv/app/app
       - ./migrations:/srv/app/migrations
+      # Tests are excluded from the image (.dockerignore) but mounted here so
+      # `docker compose exec api pytest` runs the working tree.
+      - ./tests:/srv/app/tests
     ports:
       - "${API_DEV_PORT:-8000}:8000"
 

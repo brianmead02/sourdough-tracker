@@ -71,6 +71,56 @@ def check() -> None:
         raise typer.Exit(code=1)
 
 
+@app.command("create-admin")
+def create_admin(
+    email: str = typer.Option(..., prompt=True),
+    handle: str = typer.Option(..., prompt=True),
+    display_name: str = typer.Option(..., prompt=True),
+    password: str = typer.Option(..., prompt=True, hide_input=True, confirmation_prompt=True),
+) -> None:
+    """Create a pre-verified administrator account."""
+
+    async def _create() -> None:
+        from datetime import UTC, datetime
+
+        from app.db import dispose_engine, get_session_factory
+        from app.models.user import UserRole
+        from app.schemas.validators import validate_handle, validate_password
+        from app.services import auth as auth_service
+
+        clean_handle = validate_handle(handle)
+        validate_password(password)
+
+        async with get_session_factory()() as session:
+            if await auth_service.get_user_by_email(session, email) is not None:
+                typer.secho(f"a user with email {email} already exists", fg=typer.colors.RED)
+                raise typer.Exit(code=1)
+            if await auth_service.handle_taken(session, clean_handle):
+                typer.secho(f"handle @{clean_handle} is taken", fg=typer.colors.RED)
+                raise typer.Exit(code=1)
+
+            user = await auth_service.create_user(
+                session,
+                email=email,
+                password=password,
+                handle=clean_handle,
+                display_name=display_name,
+                role=UserRole.admin,
+            )
+            # Created out-of-band by an operator, so no email round-trip is needed.
+            user.email_verified_at = datetime.now(UTC)
+            await session.commit()
+            typer.secho(f"created admin @{clean_handle} ({email})", fg=typer.colors.GREEN)
+
+        await dispose_engine()
+
+    try:
+        asyncio.run(_create())
+    except ValueError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+
 @db_app.command("upgrade")
 def db_upgrade(revision: str = typer.Argument("head")) -> None:
     """Apply migrations up to REVISION."""

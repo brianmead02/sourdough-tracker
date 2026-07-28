@@ -29,6 +29,13 @@ async def enqueue_heartbeat(ctx: dict[str, Any]) -> None:
     await ctx["redis"].enqueue_job("heartbeat", _queue_name=WORK_QUEUE)
 
 
+async def send_email(ctx: dict[str, Any], to: str, subject: str, body: str) -> None:
+    """Deliver transactional email off the request path."""
+    from app.services.email import send_email as deliver
+
+    await deliver(to, subject, body)
+
+
 async def drain_due_notifications(ctx: dict[str, Any]) -> int:
     """Beat tick: claim due scheduled notifications and enqueue a send per channel.
 

@@ -1,20 +1,27 @@
 name: sourdough
 
+# api, worker and beat are one image with different commands. Only `api` declares
+# the build so the tag is produced exactly once; the others consume it and are
+# ordered after it. This makes running a rebuilt api against a stale worker
+# impossible — they are always the same image.
 x-app: &app
-  build:
-    context: .
-    dockerfile: docker/Dockerfile
+  image: ${APP_IMAGE:-sourdough-app:local}
   env_file: .env
-  depends_on:
-    postgres:
-      condition: service_healthy
-    redis:
-      condition: service_healthy
   restart: unless-stopped
+
+x-app-deps: &app-deps
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
 
 services:
   api:
     <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    depends_on: *app-deps
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     expose:
       - "8000"
@@ -27,10 +34,24 @@ services:
 
   worker:
     <<: *app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started  # ordering only: api owns the image build
     command: ["arq", "app.worker.settings.WorkerSettings"]
 
   beat:
     <<: *app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
     command: ["arq", "app.worker.settings.BeatSettings"]
 
   postgres:

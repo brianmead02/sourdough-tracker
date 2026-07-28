@@ -18,6 +18,7 @@ from app.worker.tasks import (
     drain_due_notifications,
     enqueue_heartbeat,
     heartbeat,
+    send_email,
 )
 
 
@@ -41,7 +42,7 @@ async def _shutdown(ctx: dict[str, Any]) -> None:
 
 
 class WorkerSettings:
-    functions: ClassVar[list[Any]] = [heartbeat]
+    functions: ClassVar[list[Any]] = [heartbeat, send_email]
     queue_name = WORK_QUEUE
     redis_settings = _redis_settings()
     on_startup = _startup
