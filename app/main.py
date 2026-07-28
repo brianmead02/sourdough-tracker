@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.config import get_settings
 from app.db import dispose_engine
+from app.queue import dispose_arq_pool
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     logger.info("%s starting (environment=%s)", settings.app_name, settings.environment)
     yield
+    await dispose_arq_pool()
     await dispose_engine()
     logger.info("shutdown complete")
 
