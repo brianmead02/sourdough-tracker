@@ -67,6 +67,28 @@ def token_from_email(body: str) -> str:
     return match.group(1)
 
 
+async def register_user(
+    client: AsyncClient, outbox: list[tuple[str, str, str]], *, verify: bool = True
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Register, optionally confirm the email, log in. Returns (auth headers, account)."""
+    account = unique_account()
+    first_email = len(outbox)
+    resp = await client.post("/api/v1/auth/register", json=account)
+    assert resp.status_code == 202, resp.text
+
+    if verify:
+        token = token_from_email(outbox[first_email][2])
+        confirmed = await client.post("/api/v1/auth/verify-email", json={"token": token})
+        assert confirmed.status_code == 200, confirmed.text
+
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": account["email"], "password": account["password"]},
+    )
+    assert login.status_code == 200, login.text
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}, account
+
+
 def unique_account() -> dict[str, str]:
     suffix = uuid.uuid4().hex[:12]
     return {

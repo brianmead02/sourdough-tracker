@@ -4,7 +4,7 @@ Multi-tenant sourdough service: starter management, live proofing predictions, b
 shareable recipes, flour inventory/costing, and XP + achievements + seasonal leaderboards —
 with reminders over Web Push, email, ntfy and in-app.
 
-Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 1 (identity) complete.**
+Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 2 (starters) complete.**
 
 ## Quick start
 
@@ -96,3 +96,27 @@ The properties worth knowing before changing this code:
   Redis outage must not lock everyone out of logging in.
 - `JWT_SECRET` must be ≥32 characters, and the app refuses to boot in `prod` with the shipped
   dev default.
+
+## Starters (Phase 2)
+
+`/api/v1/starters` — CRUD plus `/feedings`, `/observations`, `/streak`, `/suggested-feed`, and a
+cross-starter `/starters/schedule`. Reads need a login; writes additionally need a confirmed
+email address. The modelling decisions:
+
+- **The feed ratio (starter:flour:water) is the source of truth; `hydration_pct` is derived
+  from it.** Storing both would let them disagree.
+- **Streaks are counted in scheduled intervals, not calendar days.** That is what makes a
+  fridge-kept starter work: set its interval to a week and a weekly feed sustains the streak,
+  while a daily starter still has to be fed daily. A feed may be up to `GRACE_FACTOR` (1.5×)
+  late and still count.
+- **Streaks are derived from the feeding rows on read, never stored as a counter** — so they
+  cannot drift, and a corrected feeding retroactively corrects the streak.
+- **`overdue` on the schedule and a broken streak are the same instant, by construction.**
+  A unit test asserts the two agree, so the dashboard can never contradict the streak page.
+- **Anti-cheat:** `fed_at` may not be in the future (5 min skew allowed) or more than 30 days
+  back, and a second feeding within 30 minutes of an existing one is a 409 rather than a
+  silent no-op.
+- **Deletes are soft, and the unique index on (user, name) is partial** (`WHERE deleted_at IS
+  NULL`) — retiring "Bubbles" frees the name, but the feeding history survives, so
+  delete-and-recreate cannot farm achievements later.
+- Another user's starter returns **404, not 403** — existence is not disclosed.
