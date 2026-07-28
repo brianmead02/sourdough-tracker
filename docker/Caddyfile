@@ -1,0 +1,31 @@
+# Prod edge. SITE_ADDRESS=example.com gets automatic TLS;
+# SITE_ADDRESS=localhost serves over plain HTTP for a local prod smoke test.
+{$SITE_ADDRESS} {
+	encode gzip zstd
+
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle /openapi.json {
+		reverse_proxy api:8000
+	}
+
+	# PWA shell (Phase 8). Unknown paths fall back to index.html for client routing.
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

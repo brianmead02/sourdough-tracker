@@ -1,0 +1,28 @@
+.env
+*.env.local
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Flutter (Phase 9)
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins*
+
+# Vendored web deps are committed on purpose (offline-first, see docs/PLAN.md §2)
+
+.DS_Store
+.idea/
+.vscode/

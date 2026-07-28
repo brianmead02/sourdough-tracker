@@ -1,0 +1,48 @@
+# Dev overlay: hot reload, published ports, SMTP catcher.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Every published port is overridable in .env — this stack is expected to run
+# alongside other local services that already own the default ports.
+name: sourdough
+
+services:
+  api:
+    command:
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./app:/srv/app/app
+      - ./migrations:/srv/app/migrations
+    ports:
+      - "${API_DEV_PORT:-8000}:8000"
+
+  worker:
+    volumes:
+      - ./app:/srv/app/app
+
+  beat:
+    volumes:
+      - ./app:/srv/app/app
+
+  postgres:
+    ports:
+      - "${POSTGRES_DEV_PORT:-5432}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_DEV_PORT:-6379}:6379"
+
+  minio:
+    ports:
+      - "${MINIO_DEV_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_DEV_PORT:-9001}:9001"
+
+  ntfy:
+    ports:
+      - "${NTFY_DEV_PORT:-8081}:80"
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "${MAILHOG_SMTP_DEV_PORT:-1025}:1025"
+      - "${MAILHOG_UI_DEV_PORT:-8025}:8025"
+    restart: unless-stopped
