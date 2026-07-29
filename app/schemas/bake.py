@@ -7,6 +7,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.bake import BakeStatus, PhotoKind
+from app.schemas.inventory import ConsumptionResponse
 
 Score = Annotated[int, Field(ge=1, le=5)]
 OptionalScore = Annotated[int | None, Field(ge=1, le=5)]
@@ -63,6 +64,9 @@ class BakeCompleteRequest(BaseModel):
     oven_temp_c: float | None = Field(default=None, ge=50, le=400)
     bake_time_minutes: int | None = Field(default=None, ge=1, le=600)
     notes: str | None = Field(default=None, max_length=5000)
+    # Draw this bake's flour from inventory and cost it. Opt-out, because not
+    # every baker tracks stock, and consuming silently would be a surprise.
+    consume_inventory: bool = True
 
 
 class RatingInput(BaseModel):
@@ -126,5 +130,13 @@ class BakeResponse(BaseModel):
     scoring_pattern: str | None
     steps: list[dict[str, object]]
     notes: str | None
+    flour_cost: float | None
+    flour_cost_per_loaf: float | None
     rating: RatingResponse | None
     photo_count: int
+
+
+class BakeCompleteResponse(BakeResponse):
+    """Completion also reports what it drew from stock, if anything."""
+
+    inventory: "ConsumptionResponse | None" = None

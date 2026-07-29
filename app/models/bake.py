@@ -82,6 +82,13 @@ class Bake(Base, UUIDPrimaryKey, Timestamped, SoftDeletable):
     steps: Mapped[list[dict[str, object]]] = mapped_column(JSONB, default=list, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
 
+    # Costed from inventory when the bake completes (Phase 5). Named for what is
+    # actually counted: the flours drawn from stock, not every input.
+    flour_cost: Mapped[float | None] = mapped_column(Float)
+    flour_cost_per_loaf: Mapped[float | None] = mapped_column(Float)
+    # Set once, so re-completing or replaying cannot double-consume stock.
+    inventory_consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     rating: Mapped["BakeRating | None"] = relationship(
         back_populates="bake", cascade="all, delete-orphan", passive_deletes=True, lazy="selectin"
     )

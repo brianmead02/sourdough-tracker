@@ -4,7 +4,7 @@ Multi-tenant sourdough service: starter management, live proofing predictions, b
 shareable recipes, flour inventory/costing, and XP + achievements + seasonal leaderboards —
 with reminders over Web Push, email, ntfy and in-app.
 
-Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 4 (recipes & bakes) complete.**
+Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 5 (inventory) complete.**
 
 ## Quick start
 
@@ -183,3 +183,32 @@ email address. The modelling decisions:
   private; reads go through time-limited signed URLs.
 - `MINIO_PUBLIC_ENDPOINT` must be set in any real deployment — presigned URLs are handed to
   browsers and phones, which cannot resolve the compose-internal `minio` hostname.
+
+## Inventory and costing (Phase 5)
+
+`/api/v1/inventory` — items, a per-item transaction ledger, `/low-stock` and `/cost-report`.
+Completing a bake draws its flour from stock and costs it.
+
+- **There is no `quantity_on_hand` column.** On-hand is the sum of the ledger, the same way a
+  streak is derived from feedings: a stored counter and a transaction history are two sources
+  of truth that eventually disagree, and when they do it is the counter that is wrong.
+- **Valuation is weighted average, and the average is stamped onto each consumption.** Without
+  the stamp, buying cheaper flour next month would silently rewrite what last month's loaves
+  cost. FIFO would be more precise but needs lot tracking, for a difference smaller than the
+  scale error on a home baker's balance.
+- **Quantities are always positive magnitudes; the sign comes from the transaction kind**, so
+  a negative "consume" cannot quietly become a stock increase. Only `adjust` may go either way
+  (via `decrease`), because a stock count can correct in both directions.
+- **Consumption prices are never accepted from the client** — a purchase requires a price, a
+  consumption refuses one.
+- **Partial costs are reported as no cost at all.** If a blend names a flour with no matching
+  inventory item, that flour appears in `unmatched` and `flour_cost` stays null. A figure that
+  quietly excludes 20% of the flour reads as the real cost and is worse than nothing.
+- **Stock may go negative, and a bake is never blocked by inventory.** The bread was baked
+  whether or not the ledger agrees; the ledger is the thing that is wrong.
+- **Only flours are consumed.** Salt and inclusions are a rounding error against flour, and
+  guessing which item a recipe meant by "seeds" would produce a confidently wrong number —
+  hence `flour_cost`, not `ingredient_cost`.
+- `inventory_consumed_at` on the bake makes consumption single-shot, so a replay cannot
+  double-draw stock.
+- Everything is grams and cost-per-kg. Water comes from the tap and is not inventoried.

@@ -1,6 +1,7 @@
 """Bakes: the log of what was actually made, with ratings and photos."""
 
 import uuid
+from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -16,6 +17,7 @@ from app.models.proofing import ProofSession
 from app.models.recipe import Recipe
 from app.schemas.bake import (
     BakeCompleteRequest,
+    BakeCompleteResponse,
     BakeCreate,
     BakeResponse,
     BakeUpdate,
@@ -24,7 +26,9 @@ from app.schemas.bake import (
     RatingInput,
     RatingResponse,
 )
+from app.schemas.inventory import ConsumptionResponse
 from app.schemas.proofing import ProofSessionResponse
+from app.services import inventory as inventory_service
 from app.services import storage
 from app.services.starters import CLOCK_SKEW_ALLOWANCE, MAX_BACKDATE
 
@@ -144,10 +148,10 @@ async def delete_bake(bake_id: uuid.UUID, user: VerifiedUser, db: SessionDep) ->
     bake.deleted_at = datetime.now(UTC)
 
 
-@router.post("/{bake_id}/complete", response_model=BakeResponse)
+@router.post("/{bake_id}/complete", response_model=BakeCompleteResponse)
 async def complete_bake(
     bake_id: uuid.UUID, payload: BakeCompleteRequest, user: VerifiedUser, db: SessionDep
-) -> BakeResponse:
+) -> BakeCompleteResponse:
     bake = await _get_owned(bake_id, user.id, db)
     if bake.status is not BakeStatus.in_progress:
         raise HTTPException(
@@ -172,7 +176,14 @@ async def complete_bake(
             setattr(bake, field, value)
 
     await db.flush()
-    return _to_response(bake)
+
+    consumption = None
+    if payload.consume_inventory:
+        # Never let a stock problem block recording that the bread was baked.
+        result = await inventory_service.consume_for_bake(db, bake)
+        consumption = ConsumptionResponse(**asdict(result))
+
+    return BakeCompleteResponse(**_to_response(bake).model_dump(), inventory=consumption)
 
 
 # --- rating -----------------------------------------------------------------
