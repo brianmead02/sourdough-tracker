@@ -4,7 +4,8 @@ Multi-tenant sourdough service: starter management, live proofing predictions, b
 shareable recipes, flour inventory/costing, and XP + achievements + seasonal leaderboards —
 with reminders over Web Push, email, ntfy and in-app.
 
-Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 5 (inventory) complete.**
+Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 6 (gamification) complete —
+the server is feature-complete apart from notifications.**
 
 ## Quick start
 
@@ -49,6 +50,9 @@ sdt version              # application version
 sdt config               # resolved settings, secrets masked
 sdt check                # verify Postgres + Redis connectivity
 sdt create-admin         # create a pre-verified administrator account
+sdt seed-achievements    # project the code catalogue into the achievement table
+sdt recompute-xp --yes   # rebuild the whole XP ledger from the underlying data
+sdt refresh-leaderboard  # rebuild the leaderboard rollup now
 sdt db upgrade [rev]     # apply migrations (default: head)
 sdt db downgrade <rev>
 sdt db revision -m "..." # autogenerate a migration from model changes
@@ -212,3 +216,38 @@ Completing a bake draws its flour from stock and costs it.
 - `inventory_consumed_at` on the bake makes consumption single-shot, so a replay cannot
   double-draw stock.
 - Everything is grams and cost-per-kg. Water comes from the tap and is not inventoried.
+
+## Gamification (Phase 6)
+
+`/api/v1/gamification` (tier, achievements, XP history) and `/api/v1/leaderboard`
+(six category boards, `/me`, admin `/refresh`). 44 achievements across 19 metrics.
+
+- **XP is an append-only ledger, unique on `(user, rule, source_type, source_id)`.** That one
+  constraint buys idempotence — a retry, a replay or a double-tap awards once, and two
+  concurrent requests cannot both pass a check and both insert, because the insert *is* the
+  check. It also buys recomputability: `sdt recompute-xp` throws the ledger away and re-derives
+  it from the underlying bakes, feedings and proofs.
+- **Replay is faithful, not approximate.** Events replay in chronological order through the same
+  `award()` as live play, backdated so they land in the season and daily bucket they belong to.
+  Caps are per **UTC calendar day** rather than a rolling 24 hours precisely so replay can
+  reproduce them exactly — a sliding window could not.
+- **Achievements are declarative**: a metric, a target, and the events that could move it.
+  Listing the events keeps the engine cheap (logging a feeding does not re-evaluate 44 badges),
+  and every metric is a plain aggregate, so a badge is always derivable from first principles
+  rather than from a counter someone remembered to increment. Unit tests assert every
+  achievement has a working metric and is reachable from some event.
+- **The engine runs a second pass after any award**, because "earn 10 badges" is itself a badge
+  and would otherwise sit unearned until an unrelated event happened along.
+- **Anti-cheat**: daily caps per rule (set above a plausible baking day — the action still
+  succeeds, it just stops paying); the flagship hydration badges require a photo, not just a
+  typed number; hydration badges also require the loaf to have been rated 4+, so claiming 95%
+  on a brick earns nothing; suspended and deleted accounts never appear on a board.
+- **Tiers are lifetime XP; seasons are quarterly and derived from the calendar**, so a season can
+  never fail to exist because nobody rolled it over, and a newcomer can win a board without
+  facing three years of accumulated total.
+- **A private profile still ranks, but anonymously.** Opting out of a public profile is not
+  opting out of competing, and must not leak a name the user chose not to publish.
+- **Leaderboards read one periodically-refreshed rollup** (beat cron, every 5 minutes) rather
+  than aggregating history per page view. The plan floated a Redis sorted set in front of it;
+  that is deliberately not built — the rollup is already a cache, and a second one would be a
+  third copy of the truth for no gain at this size.

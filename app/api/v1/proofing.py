@@ -25,6 +25,8 @@ from app.schemas.proofing import (
 )
 from app.services import fermentation
 from app.services import proofing as proof_service
+from app.services.achievements import publish
+from app.services.events import DomainEvent
 from app.services.starters import CLOCK_SKEW_ALLOWANCE, MAX_BACKDATE
 
 router = APIRouter(prefix="/proofing", tags=["proofing"])
@@ -344,6 +346,13 @@ async def complete_session(
     if payload.notes:
         proof.notes = payload.notes
     await db.flush()
+    await publish(
+        db,
+        DomainEvent.proof_completed,
+        user_id=user.id,
+        source_type="proof_session",
+        source_id=proof.id,
+    )
     return ProofSessionResponse.model_validate(proof)
 
 
