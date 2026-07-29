@@ -6,9 +6,8 @@ achievements and seasonal leaderboards across the whole service.
 
 Built as a `docker-compose` stack around a FastAPI backend.
 
-**Status: phases 0–7 complete — the server is feature-complete.** What remains
-is clients and hardening. There is **no user interface yet**: the PWA is Phase 8,
-so today the service is used through its API.
+**Status: phases 0–8 complete.** The server is feature-complete and ships with an
+installable web app. What remains is the Flutter Android client and hardening.
 
 ---
 
@@ -24,6 +23,7 @@ curl localhost:8000/api/v1/health
 
 | Service | URL |
 |---|---|
+| **The app** | **http://localhost:8000** |
 | API + interactive docs | http://localhost:8000/docs |
 | Mailhog (catches all outbound email) | http://localhost:8025 |
 | MinIO console (`minioadmin` / `minioadmin`) | http://localhost:9001 |
@@ -70,6 +70,8 @@ Production, including the settings that must change:
   completing a bake tells you what the loaf actually cost.
 - **Gamification** — 44 achievements, XP, six leaderboard categories and
   quarterly seasons, with anti-cheat that assumes the internet is watching.
+- **The app** — an installable PWA with live proof countdowns, one-tap feeding, and
+  an offline outbox so a bad kitchen wifi never loses a feeding.
 - **Reminders** — a scheduled-notification table drained every minute, delivering
   to Web Push, email, ntfy and an in-app inbox. Checking on a proof *moves* its
   reminder rather than queueing another; quiet hours defer housekeeping but never
@@ -98,9 +100,10 @@ sdt db upgrade | downgrade | revision | current
 ## Tests
 
 ```bash
-docker compose exec api pytest -q                 # 192 unit, no I/O, ~1s
-docker compose exec api pytest -q -m integration  # 191 against live services
+docker compose exec api pytest -q                 # 205 unit, no I/O, ~1s
+docker compose exec api pytest -q -m integration  # 193 against live services
 docker compose exec api sh -c "ruff check . && ruff format --check . && mypy app"
+node --test web/test/app.test.mjs                  # 11 browser-logic tests
 ```
 
 Integration tests are not mocked: email really lands in Mailhog, uploads really

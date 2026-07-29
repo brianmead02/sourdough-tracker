@@ -18,6 +18,8 @@ services:
       # Tool config (ruff/mypy/pytest) lives here, so mounting it means a lint
       # rule change does not need an image rebuild. Dependency changes still do.
       - ./pyproject.toml:/srv/app/pyproject.toml:ro
+      # The PWA, served by the API in dev (Caddy serves it directly in prod).
+      - ./web:/srv/app/web:ro
     ports:
       - "${API_DEV_PORT:-8000}:8000"
 

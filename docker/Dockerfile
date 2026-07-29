@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir -e ".[dev]"
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY app ./app
+COPY web ./web
 
 RUN useradd --create-home --uid 10001 sourdough \
     && chown -R sourdough:sourdough /srv/app

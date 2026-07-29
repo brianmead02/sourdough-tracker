@@ -12,9 +12,9 @@
 
 ## Where things stand
 
-Phases 0–7 are built and verified. **The server is feature-complete.** What
-remains is clients (PWA, Flutter) and hardening — there is still **no user
-interface**.
+Phases 0–8 are built and verified. The server is feature-complete and there is
+now an **installable web app** at `/`. What remains is the Flutter Android client
+and hardening.
 
 | Phase | State |
 |---|---|
@@ -26,12 +26,11 @@ interface**.
 | 5 · Inventory | ✅ Transaction ledger, bake consumption, per-loaf costing |
 | 6 · Gamification | ✅ XP ledger, tiers, 44 achievements, seasons, leaderboards |
 | 7 · Notifications | ✅ Scheduler + Web Push / email / ntfy / in-app |
-| 8 · PWA | ⬜ The web interface |
+| 8 · PWA | ✅ Installable web app, offline outbox, Web Push |
 | 9 · Flutter Android | ⬜ |
 | 10 · Hardening | ⬜ Admin & moderation, backups, data export, load testing |
 
-**Today the only way to use the service is the API** — via Swagger at
-`/docs`, or an HTTP client.
+Open **http://localhost:8000** for the app, or `/docs` for the API.
 
 ## By the numbers
 
@@ -41,8 +40,9 @@ interface**.
 | Database tables | 28 |
 | Migrations | 7 |
 | Achievements | 44 across 19 metrics |
-| Tests | 192 unit (no I/O) + 191 integration (live Postgres, Redis, MinIO, ntfy) |
-| Lines of Python | ~15,300 including tests |
+| Tests | 205 unit + 193 integration (live Postgres, Redis, MinIO, ntfy) + 11 browser-logic |
+| Lines of Python | ~15,600 including tests |
+| PWA payload | ~108 KB uncompressed, no build step |
 
 ## The five ideas worth knowing
 
