@@ -5,6 +5,13 @@ metadata. Later phases append to this list.
 """
 
 from app.models.base import Base, SoftDeletable, Timestamped, UUIDPrimaryKey
+from app.models.proofing import (
+    PokeTest,
+    ProofCheck,
+    ProofSession,
+    ProofStage,
+    ProofStatus,
+)
 from app.models.starter import (
     Aroma,
     Feeding,
@@ -27,6 +34,11 @@ __all__ = [
     "EmailVerification",
     "Feeding",
     "PasswordReset",
+    "PokeTest",
+    "ProofCheck",
+    "ProofSession",
+    "ProofStage",
+    "ProofStatus",
     "RefreshToken",
     "SoftDeletable",
     "Starter",
