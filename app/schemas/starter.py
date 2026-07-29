@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import date, datetime
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -9,9 +10,11 @@ from app.models.starter import Aroma, StarterState
 from app.services.starters import ScheduleStatus
 
 # Shared bounds. Generous enough for a bakery, tight enough to reject nonsense
-# that would poison streaks, averages and the Phase 3 fermentation model.
-Grams = Field(gt=0, le=100_000)
-OptionalTemp = Field(default=None, ge=-20, le=60)
+# that would poison streaks, averages and the fermentation model. Annotated
+# aliases rather than shared Field() instances, which can be mutated during
+# model construction.
+Grams = Annotated[float, Field(gt=0, le=100_000)]
+OptionalTemp = Annotated[float | None, Field(ge=-20, le=60)]
 
 
 class StarterCreate(BaseModel):
@@ -75,11 +78,11 @@ class StarterListItem(StarterResponse):
 class FeedingCreate(BaseModel):
     # Defaults to "now" server-side when omitted.
     fed_at: datetime | None = None
-    starter_g: float = Grams
-    flour_g: float = Grams
-    water_g: float = Grams
+    starter_g: Grams
+    flour_g: Grams
+    water_g: Grams
     flour_blend: dict[str, float] | None = None
-    ambient_temp_c: float | None = OptionalTemp
+    ambient_temp_c: OptionalTemp = None
     notes: str | None = Field(default=None, max_length=500)
 
     @field_validator("flour_blend")
@@ -119,7 +122,7 @@ class ObservationCreate(BaseModel):
     peaked: bool = False
     float_test_passed: bool | None = None
     aroma: Aroma | None = None
-    dough_temp_c: float | None = OptionalTemp
+    dough_temp_c: OptionalTemp = None
     notes: str | None = Field(default=None, max_length=500)
 
 

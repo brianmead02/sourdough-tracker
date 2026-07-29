@@ -4,7 +4,7 @@ Multi-tenant sourdough service: starter management, live proofing predictions, b
 shareable recipes, flour inventory/costing, and XP + achievements + seasonal leaderboards —
 with reminders over Web Push, email, ntfy and in-app.
 
-Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 2 (starters) complete.**
+Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 3 (proofing) complete.**
 
 ## Quick start
 
@@ -120,3 +120,36 @@ email address. The modelling decisions:
   NULL`) — retiring "Bubbles" frees the name, but the feeding history survives, so
   delete-and-recreate cannot farm achievements later.
 - Another user's starter returns **404, not 403** — existence is not disclosed.
+
+## Proofing (Phase 3)
+
+`/api/v1/proofing` — `POST /estimate` (preview without committing), session start/complete/abort,
+`POST /sessions/{id}/checks`, and `GET /sessions/active` for live countdowns. The model lives in
+[app/services/fermentation.py](app/services/fermentation.py) as pure functions.
+
+    rate = base_rate * Q10^((T - T_ref)/10) * (inoculation/ref)^k * vigour
+    eta  = target_rise_fraction / rate
+
+- **Every coefficient is configuration, not a constant** (`FERMENT_*` in `.env`). The model is
+  wrong until calibrated against real data, so tuning must not require a code change.
+- **Q10 is piecewise — steeper below 15°C — and continuous at the threshold.** A single Q10
+  across 4–30°C badly under-predicts retard; with the split, a 4°C fridge runs ~13× slower than
+  24°C, which matches how an overnight retard actually behaves.
+- **Rise is modelled as linear in time.** Real dough accelerates then plateaus. The
+  approximation holds over one proof window, and every check re-fits it — which is what
+  actually keeps a long proof honest.
+- **Checks blend observation with the model**, weighted `n/(n+1)` toward the dough as checks
+  accumulate. A check inside the first 15 minutes is ignored for rate purposes: dough barely
+  moves early, so an inferred rate would be noise.
+- **Predictions are a window, never a bare timestamp.** The spread starts at ±35% and narrows
+  with checks but never reaches zero — the model does not earn certainty because someone looked
+  at the dough four times. Note the window is a fraction of *remaining* time, so it tightens
+  largely because less time is left, not because confidence spiked.
+- **Vigour is measured, not asserted.** It comes from the starter's own peak observations
+  (median of the last 8, temperature-normalised so a hot kitchen isn't mistaken for a lively
+  starter), clamped to 0.5–2.0, and snapshotted onto the session as `vigour_used` so an old
+  prediction stays explicable.
+- **`autolyse` is time-based, not predicted.** A rest has a fixed length; its window has zero
+  spread rather than fake precision.
+- `predicted_end_at` is the single field **Phase 7 will schedule the "dough is ready" reminder
+  from**, and re-fits update it in place so rescheduling has one thing to watch.

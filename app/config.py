@@ -42,6 +42,32 @@ class Settings(BaseSettings):
     # --- rate limiting -------------------------------------------------------
     rate_limit_enabled: bool = True
 
+    # --- fermentation model (docs/PLAN.md §5) --------------------------------
+    # These are tuning knobs, not constants: the model is wrong until calibrated
+    # against real observed-vs-predicted data, and must be adjustable without a
+    # code change.
+    ferment_ref_temp_c: float = 24.0
+    # Rise fraction per hour at reference temperature and inoculation, i.e. 0.15
+    # means a 75% bulk rise takes 5 hours.
+    ferment_base_rise_per_hour: float = 0.15
+    # Rate multiplier per 10 degrees. Yeast slows disproportionately in the cold,
+    # so a single Q10 across 4-30C badly under-predicts retard times; the curve is
+    # piecewise and continuous at the threshold.
+    ferment_q10_warm: float = 2.0
+    ferment_q10_cold: float = 3.0
+    ferment_cold_threshold_c: float = 15.0
+    ferment_ref_starter_pct: float = 20.0
+    # Sub-linear: doubling the starter does not halve the time.
+    ferment_inoculation_exponent: float = 0.7
+    # Hours for a reference starter to peak at reference temperature.
+    ferment_ref_peak_hours: float = 6.0
+    ferment_vigour_min: float = 0.5
+    ferment_vigour_max: float = 2.0
+    # Half-width of the prediction window as a fraction of the estimate, before
+    # any checks have been logged, and the floor it converges towards.
+    ferment_base_spread: float = 0.35
+    ferment_min_spread: float = 0.08
+
     # --- postgres ------------------------------------------------------------
     postgres_host: str = "postgres"
     postgres_port: int = 5432
