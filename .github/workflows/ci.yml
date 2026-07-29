@@ -19,6 +19,16 @@ jobs:
       - run: ruff format --check .
       - run: mypy app
 
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # No build step and no dependencies — the PWA is vendored on purpose.
+      - run: node --test web/test/app.test.mjs
+
   test:
     runs-on: ubuntu-latest
     services:

@@ -3,9 +3,12 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.config import get_settings
@@ -50,7 +53,37 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(api_router)
+    _mount_pwa(app)
     return app
+
+
+def _mount_pwa(app: FastAPI) -> None:
+    """Serve the PWA from the API when a `web/` directory is present.
+
+    In production Caddy serves these files directly and never reaches the API.
+    Mounting here means a bare `docker compose up` gives a working app instead
+    of only an API — and it is registered *after* the routers, so it can never
+    shadow `/api` or `/docs`.
+
+    The service worker is served with `no-cache` deliberately: browsers honour
+    that for `sw.js`, and a cached-forever service worker is how a PWA gets
+    permanently stuck on an old release.
+    """
+    web_root = Path(__file__).resolve().parent.parent / "web"
+    if not (web_root / "index.html").exists():
+        logger.info("no web/ directory found; serving API only")
+        return
+
+    @app.get("/sw.js", include_in_schema=False)
+    async def service_worker() -> FileResponse:
+        return FileResponse(
+            web_root / "sw.js",
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    app.mount("/", StaticFiles(directory=web_root, html=True), name="pwa")
+    logger.info("serving PWA from %s", web_root)
 
 
 app = create_app()

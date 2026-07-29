@@ -322,6 +322,62 @@ URLs.
 
 ---
 
+## 7a. The web app
+
+An installable PWA in `web/`, served by Caddy in production and by the API's own
+static mount in development — so `docker compose up` gives a working app rather
+than only an API. The mount is registered *after* the routers, so it can never
+shadow `/api` or `/docs`.
+
+**No build step, and nothing from a CDN.** Alpine.js is vendored (44 KB); the
+whole shell is ~108 KB uncompressed. There is no bundler, no `node_modules`, and
+no network dependency at runtime — which is what makes the offline story
+possible at all.
+
+**Hand-written CSS instead of Tailwind.** The plan specified the Tailwind browser
+build, but that ships a ~400 KB runtime compiler that scans the DOM for class
+names. For an app whose value is a small, instantly-cacheable shell — re-fetched
+whenever the service worker version changes — that is the wrong trade. The
+stylesheet is ~10 KB and does the same job. *(A deliberate deviation.)*
+
+**Hash routing** (`#/starters`). It needs no server rewrite rule, so the app is
+servable by anything, and offline navigation is free.
+
+**Caching is split by how fast the data ages:**
+
+| | Strategy | Why |
+|---|---|---|
+| App shell | cache-first | Changes only on deploy |
+| API reads | network-first, small cache | A stale proof ETA or streak is worse than a spinner |
+| Writes | never intercepted | They belong to the outbox; a replaying service worker would double-post |
+
+`sw.js` is served with `Cache-Control: no-cache`. Browsers honour that for
+service workers specifically, and a cached-forever `sw.js` is exactly how a PWA
+gets permanently stuck on an old release.
+
+**The offline outbox** is the part that earns its keep. A kitchen has bad wifi
+and the phone is in a pocket; losing a feeding because the network blinked would
+make the tracker untrustworthy. Mutations go to IndexedDB and replay oldest-first
+when connectivity returns — order matters, because an observation references the
+feeding before it. The drain policy is deliberate:
+
+* network error, 5xx or 401 → **stop and keep everything**, retry later
+* 4xx that is not auth → **drop that entry and continue**, because it will never
+  succeed and a stuck entry blocks everything behind it
+
+**Token refresh is collapsed to one in-flight request.** Refresh tokens rotate,
+so two concurrent 401s would both rotate and the loser's token would look to the
+server exactly like a replayed — i.e. stolen — token, killing the session.
+
+Browser logic is tested with `node --test web/test/app.test.mjs`: 11 tests over
+the countdown maths and the outbox drain policy, with browser globals stubbed so
+the modules under test are the ones shipped. Static wiring — every referenced
+asset, every precache entry, every Alpine binding resolving to something that
+exists — is checked in `tests/test_pwa_assets.py`, because a missing icon or a
+dangling handler fails silently in a browser.
+
+---
+
 ## 8. The fermentation model
 
 The feature that makes this more than a diary. See
@@ -361,8 +417,9 @@ eta  = target_rise_fraction / rate
 
 | Layer | Count | Runs against |
 |---|---|---|
-| Unit | 192 | Nothing — pure functions only |
-| Integration | 191 | Live Postgres, Redis, MinIO and ntfy |
+| Unit | 205 | Nothing — pure functions and static assets |
+| Integration | 193 | Live Postgres, Redis, MinIO and ntfy |
+| Browser logic | 11 | node, with browser globals stubbed |
 
 Integration tests are marked and deselected by default (`pytest -m integration`
 to run them). They exercise the real stack: real SMTP delivery into Mailhog, real
@@ -380,6 +437,7 @@ this reason. Per-test isolation is on the Phase 10 list.
 
 | Plan said | Built | Why |
 |---|---|---|
+| Tailwind browser build | Hand-written CSS | Tailwind's CDN build is a ~400 KB runtime compiler; the shell is 10 KB of CSS instead |
 | `notification_preference` table | JSONB map on `notification_settings` | Adding a reminder type needs no migration, and an unset event falls back to its default |
 | Single Q10 for fermentation | Piecewise warm/cold Q10 | A flat Q10 under-predicts retard by ~3× |
 | `inventory_item.qty_on_hand` column | Derived from the ledger | A counter and a ledger drift; the ledger is also the audit trail |
@@ -391,8 +449,6 @@ this reason. Per-test isolation is on the Phase 10 list.
 
 ## 11. What is not built yet
 
-- **Phase 8 — PWA.** `web/index.html` is a placeholder. The service worker that
-  would receive Web Push lives here; the server side is ready and tested.
 - **Phase 9 — Flutter Android client.**
 - **Phase 10 — Admin/moderation UI, backups, data export, load testing,
   per-test database isolation.**

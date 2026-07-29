@@ -1,0 +1,23 @@
+{
+  "name": "Sourdough Tracker",
+  "short_name": "Sourdough",
+  "description": "Starter management, live proofing predictions, bake logs and recipes.",
+  "start_url": "/#/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#faf7f2",
+  "theme_color": "#b45309",
+  "categories": ["food", "lifestyle", "utilities"],
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Start a proof", "url": "/#/proofing" },
+    { "name": "Feed a starter", "url": "/#/starters" },
+    { "name": "Log a bake", "url": "/#/bakes" }
+  ]
+}

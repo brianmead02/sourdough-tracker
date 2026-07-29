@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Sourdough Tracker">
+  <rect width="512" height="512" rx="96" fill="#b45309"/>
+  <ellipse cx="256" cy="286" rx="168" ry="126" fill="#f5d9a8"/>
+  <ellipse cx="256" cy="272" rx="168" ry="126" fill="#e8b775"/>
+  <path d="M150 250 q54 -46 106 -46 t106 46" stroke="#8a4b0a" stroke-width="18"
+        fill="none" stroke-linecap="round"/>
+  <path d="M176 300 q40 -30 80 -30 t80 30" stroke="#8a4b0a" stroke-width="14"
+        fill="none" stroke-linecap="round" opacity="0.7"/>
+</svg>

@@ -255,7 +255,7 @@ offline queue via Drift, biometric unlock for the stored refresh token.
 | 5 | Inventory | ✅ Items, transaction ledger, bake consumption, per-loaf cost report | 2 d |
 | 6 | Gamification | ✅ XP ledger, tiers, 44 achievements, seasons, leaderboards, anti-cheat, full replay | 3–4 d |
 | 7 | Notifications | ✅ Scheduler table + beat drain, four channels, prefs, quiet hours | 3 d |
-| 8 | PWA | All screens, service worker, Web Push, offline queue, vendored deps | 4–5 d |
+| 8 | PWA | ✅ All screens, service worker, Web Push, offline outbox, vendored deps | 4–5 d |
 | 9 | Flutter | Generated client, all screens, camera, ntfy push, offline queue | 5–6 d |
 | 10 | Hardening | Admin/moderation UI, backups, data export (GDPR), load test, docs, seed data | 2–3 d |
 
