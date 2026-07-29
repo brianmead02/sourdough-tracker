@@ -6,9 +6,9 @@ achievements and seasonal leaderboards across the whole service.
 
 Built as a `docker-compose` stack around a FastAPI backend.
 
-**Status: phases 0–6 complete.** The server is feature-complete except for
-notifications. There is **no user interface yet** — the PWA is Phase 8, so today
-the service is used through its API.
+**Status: phases 0–7 complete — the server is feature-complete.** What remains
+is clients and hardening. There is **no user interface yet**: the PWA is Phase 8,
+so today the service is used through its API.
 
 ---
 
@@ -70,6 +70,10 @@ Production, including the settings that must change:
   completing a bake tells you what the loaf actually cost.
 - **Gamification** — 44 achievements, XP, six leaderboard categories and
   quarterly seasons, with anti-cheat that assumes the internet is watching.
+- **Reminders** — a scheduled-notification table drained every minute, delivering
+  to Web Push, email, ntfy and an in-app inbox. Checking on a proof *moves* its
+  reminder rather than queueing another; quiet hours defer housekeeping but never
+  the dough.
 
 ## Stack
 
@@ -87,14 +91,15 @@ sdt create-admin                      # pre-verified administrator account
 sdt seed-achievements                 # project the code catalogue into the DB
 sdt recompute-xp --yes                # rebuild the entire XP ledger from history
 sdt refresh-leaderboard               # rebuild the leaderboard rollup now
+sdt vapid-keys                        # generate a Web Push keypair for .env
 sdt db upgrade | downgrade | revision | current
 ```
 
 ## Tests
 
 ```bash
-docker compose exec api pytest -q                 # 152 unit, no I/O, ~1s
-docker compose exec api pytest -q -m integration  # 159 against live services
+docker compose exec api pytest -q                 # 192 unit, no I/O, ~1s
+docker compose exec api pytest -q -m integration  # 191 against live services
 docker compose exec api sh -c "ruff check . && ruff format --check . && mypy app"
 ```
 

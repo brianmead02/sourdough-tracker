@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUser, VerifiedUser
 from app.db import get_session
 from app.models.bake import Bake
-from app.models.proofing import ProofCheck, ProofSession, ProofStatus
+from app.models.notification import NotificationEvent
+from app.models.proofing import ProofCheck, ProofSession, ProofStage, ProofStatus
 from app.models.starter import Starter
 from app.schemas.proofing import (
     ActiveProofSession,
@@ -27,6 +28,7 @@ from app.services import fermentation
 from app.services import proofing as proof_service
 from app.services.achievements import publish
 from app.services.events import DomainEvent
+from app.services.notifications import cancel_prefix, schedule
 from app.services.starters import CLOCK_SKEW_ALLOWANCE, MAX_BACKDATE
 
 router = APIRouter(prefix="/proofing", tags=["proofing"])
@@ -65,6 +67,31 @@ def _validate_timestamp(value: datetime, now: datetime, field: str) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{field} cannot be more than {MAX_BACKDATE.days} days in the past",
         )
+
+
+async def _schedule_ready_reminder(db: AsyncSession, proof: ProofSession) -> None:
+    """(Re)queue the "dough is ready" reminder for this session.
+
+    Keyed on the session, so a proof checked five times ends with one pending
+    reminder at the latest ETA rather than five stale ones.
+    """
+    event = (
+        NotificationEvent.proof_retard_remove
+        if proof.stage is ProofStage.retard
+        else NotificationEvent.proof_ready
+    )
+    await schedule(
+        db,
+        user_id=proof.user_id,
+        event=event,
+        due_at=proof.predicted_end_at,
+        dedupe_key=f"proof:{proof.id}:ready",
+        payload={
+            "stage": proof.stage.value,
+            "target_rise_pct": proof.target_rise_pct,
+            "session_id": str(proof.id),
+        },
+    )
 
 
 # --- estimate ---------------------------------------------------------------
@@ -159,6 +186,7 @@ async def start_session(
     )
     db.add(proof)
     await db.flush()
+    await _schedule_ready_reminder(db, proof)
     return ProofSessionResponse.model_validate(proof)
 
 
@@ -296,6 +324,8 @@ async def log_check(
         proof.dough_temp_c = payload.dough_temp_c
 
     await db.flush()
+    # The whole point of the Phase 3 seam: a moved ETA moves the reminder.
+    await _schedule_ready_reminder(db, proof)
     return ProofSessionResponse.model_validate(proof)
 
 
@@ -346,6 +376,7 @@ async def complete_session(
     if payload.notes:
         proof.notes = payload.notes
     await db.flush()
+    await cancel_prefix(db, f"proof:{proof.id}:")
     await publish(
         db,
         DomainEvent.proof_completed,
@@ -364,5 +395,6 @@ async def abort_session(
     _require_running(proof)
     proof.status = ProofStatus.aborted
     proof.actual_end_at = datetime.now(UTC)
+    await cancel_prefix(db, f"proof:{proof.id}:")
     await db.flush()
     return ProofSessionResponse.model_validate(proof)

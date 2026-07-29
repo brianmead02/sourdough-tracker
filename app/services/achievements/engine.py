@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bake import Bake, BakePhoto
 from app.models.gamification import UserAchievement
+from app.models.notification import NotificationEvent
 from app.services import xp as xp_service
 from app.services.achievements.definitions import ACHIEVEMENTS, BY_EVENT, AchievementDef
 from app.services.achievements.metrics import measure
@@ -124,6 +125,20 @@ async def evaluate(
             source_type="achievement",
             source_id=xp_service.source_id_for(definition.code),
             amount=definition.xp_award,
+        )
+        from app.services.notifications import notify_now
+
+        await notify_now(
+            db,
+            user_id=user_id,
+            event=NotificationEvent.achievement_earned,
+            payload={
+                "icon": definition.icon,
+                "name": definition.name,
+                "description": definition.description,
+                "xp_award": definition.xp_award,
+            },
+            dedupe_key=f"achievement:{user_id}:{definition.code}",
         )
         awards.append(
             Award(

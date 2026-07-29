@@ -23,6 +23,7 @@ dependencies = [
     "email-validator>=2.2",
     "aiosmtplib>=3.0",
     "boto3>=1.35",
+    "pywebpush>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -58,7 +59,7 @@ warn_return_any = true
 no_implicit_optional = true
 
 [[tool.mypy.overrides]]
-module = ["arq.*", "boto3.*", "botocore.*"]
+module = ["arq.*", "boto3.*", "botocore.*", "pywebpush.*", "py_vapid.*", "cryptography.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

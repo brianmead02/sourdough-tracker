@@ -42,6 +42,20 @@ class Settings(BaseSettings):
     # --- rate limiting -------------------------------------------------------
     rate_limit_enabled: bool = True
 
+    # --- notifications -------------------------------------------------------
+    # Web Push. Generate a pair with `sdt vapid-keys`; without them the Web Push
+    # channel is simply unavailable rather than broken.
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:admin@sourdough.local"
+    # How many due rows one beat tick claims. Bounded so a backlog drains over
+    # several ticks instead of one enormous transaction.
+    notification_batch_size: int = 100
+    notification_max_attempts: int = 4
+    notification_retry_base_seconds: int = 60
+    # Reminders are pointless once they are this stale — the dough is long done.
+    notification_stale_after_hours: int = 12
+
     # --- fermentation model (docs/PLAN.md §5) --------------------------------
     # These are tuning knobs, not constants: the model is wrong until calibrated
     # against real observed-vs-predicted data, and must be adjustable without a

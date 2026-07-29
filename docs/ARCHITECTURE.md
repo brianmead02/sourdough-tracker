@@ -92,7 +92,7 @@ without a database — and why those tests run in under a second.
 
 ## 3. Data model
 
-23 tables. Grouped by the phase that introduced them.
+28 tables. Grouped by the phase that introduced them.
 
 **Identity** — `user`, `user_profile`, `refresh_token`, `email_verification`,
 `password_reset`
@@ -108,6 +108,9 @@ without a database — and why those tests run in under a second.
 
 **Gamification** — `achievement`, `user_achievement`, `xp_event`, `season`,
 `leaderboard_entry`
+
+**Notifications** — `notification_settings`, `notification_channel`,
+`scheduled_notification`, `notification_log`, `inapp_notification`
 
 ### Derived, never stored
 
@@ -243,6 +246,60 @@ seam if a board ever gets slow.
 
 ---
 
+## 6a. Notifications
+
+A **table drained by a beat tick**, not an in-process scheduler. Per-user
+reminders move (a proof check changes the ETA), must survive restarts, must not
+double-fire across replicas, and need an audit trail for "it never told me" —
+none of which an in-memory scheduler gives you.
+
+```
+domain event → schedule(dedupe_key, due_at)        upsert: one row per reminder
+                        ↓
+beat, every 60s → claim FOR UPDATE SKIP LOCKED     safe with many drainers
+                        ↓
+                  quiet hours? → defer             routine only
+                  too stale?   → drop
+                        ↓
+                  fan out to channels              independently
+                        ↓
+                  inapp · email · ntfy · webpush
+```
+
+**`dedupe_key` is the load-bearing idea.** One row per real-world reminder,
+updated in place. A proof checked five times ends with *one* pending "dough is
+ready" at the latest ETA — this is what the Phase 3 `predicted_end_at` seam was
+built for. Completing or aborting a proof cancels it; feeding a starter moves its
+next reminder.
+
+**Urgency decides quiet hours.** Time-critical reminders (`proof.ready`,
+`proof.retard_remove`) ignore them — dough that is ready at 3am is ready at 3am,
+and deferring that delivers a useless message about a loaf that over-proofed
+hours ago. Routine reminders (feed due, low stock, digest) defer to the end of
+the window, judged in the user's own timezone.
+
+**Stale reminders are dropped, not delivered late.** A "your dough is ready" six
+hours after the fact is wrong, not merely late, and it teaches the baker to
+distrust the next one.
+
+**Channels are attempted independently** and a reminder counts as sent if any
+succeeds — a dead Web Push subscription must not stop the inbox copy. Permanent
+failures (404/410 from a push service: the browser discarded the subscription)
+disable the channel rather than retrying forever; transient ones back off
+exponentially over four attempts.
+
+Two things bit during implementation and are worth knowing:
+
+* **HTTP headers are ASCII.** ntfy carries the title in a header, and titles
+  contain user text — a starter called "Gérald" or an emoji icon raises
+  `UnicodeEncodeError` and loses the whole send. Titles are folded to ASCII and
+  ntfy emoji are sent as *names* (`alarm_clock`), never characters.
+* **Web Push imports lazily**, inside the send path, which keeps the cost off
+  every request but hides a missing dependency until the first real push. A unit
+  test asserts the library is importable.
+
+---
+
 ## 7. Media
 
 The API never touches image bytes. Clients receive a **presigned POST** and
@@ -304,8 +361,8 @@ eta  = target_rise_fraction / rate
 
 | Layer | Count | Runs against |
 |---|---|---|
-| Unit | 152 | Nothing — pure functions only |
-| Integration | 159 | Live Postgres, Redis and MinIO |
+| Unit | 192 | Nothing — pure functions only |
+| Integration | 191 | Live Postgres, Redis, MinIO and ntfy |
 
 Integration tests are marked and deselected by default (`pytest -m integration`
 to run them). They exercise the real stack: real SMTP delivery into Mailhog, real
@@ -323,6 +380,7 @@ this reason. Per-test isolation is on the Phase 10 list.
 
 | Plan said | Built | Why |
 |---|---|---|
+| `notification_preference` table | JSONB map on `notification_settings` | Adding a reminder type needs no migration, and an unset event falls back to its default |
 | Single Q10 for fermentation | Piecewise warm/cold Q10 | A flat Q10 under-predicts retard by ~3× |
 | `inventory_item.qty_on_hand` column | Derived from the ledger | A counter and a ledger drift; the ledger is also the audit trail |
 | Redis sorted set for leaderboards | Rollup table only | The rollup is already a cache; Redis would be a third copy |
@@ -333,10 +391,8 @@ this reason. Per-test isolation is on the Phase 10 list.
 
 ## 11. What is not built yet
 
-- **Phase 7 — Notifications.** `scheduled_notification` table, the beat drain
-  loop, and the four channels (Web Push, email, ntfy, in-app). `predicted_end_at`
-  on a proof session is the field the scheduler will watch.
-- **Phase 8 — PWA.** `web/index.html` is a placeholder.
+- **Phase 8 — PWA.** `web/index.html` is a placeholder. The service worker that
+  would receive Web Push lives here; the server side is ready and tested.
 - **Phase 9 — Flutter Android client.**
 - **Phase 10 — Admin/moderation UI, backups, data export, load testing,
   per-test database isolation.**

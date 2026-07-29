@@ -121,6 +121,31 @@ def create_admin(
         raise typer.Exit(code=1) from exc
 
 
+@app.command("vapid-keys")
+def vapid_keys() -> None:
+    """Generate a VAPID keypair for Web Push, ready to paste into .env."""
+    import base64
+
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+    from py_vapid import Vapid01
+
+    vapid = Vapid01()
+    vapid.generate_keys()
+
+    def b64(raw: bytes) -> str:
+        """VAPID keys are base64url without padding."""
+        return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+    private_numbers = vapid.private_key.private_numbers()
+    public = vapid.public_key.public_bytes(
+        encoding=Encoding.X962, format=PublicFormat.UncompressedPoint
+    )
+    typer.echo("# Paste into .env — the private key is a secret, the public one is not.")
+    typer.echo(f"VAPID_PUBLIC_KEY={b64(public)}")
+    typer.echo(f"VAPID_PRIVATE_KEY={b64(private_numbers.private_value.to_bytes(32, 'big'))}")
+    typer.echo("VAPID_SUBJECT=mailto:admin@your-domain.example")
+
+
 @app.command("seed-achievements")
 def seed_achievements() -> None:
     """Project the code catalogue into the achievement table."""

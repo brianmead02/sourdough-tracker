@@ -1,6 +1,6 @@
 # API Reference
 
-75 endpoints under `/api/v1`. The live, always-accurate contract is the OpenAPI
+88 endpoints under `/api/v1`. The live, always-accurate contract is the OpenAPI
 schema — this document covers the **semantics that a schema cannot express**:
 which errors mean what, which operations are idempotent, and where a status code
 was chosen deliberately.
@@ -233,6 +233,41 @@ Tiers by lifetime XP: **Novice** (0) → **Home Baker** (250) → **Levain Keepe
 Boards read a rollup refreshed every five minutes, so `refreshed_at` may lag.
 **A private profile still ranks but appears as "Anonymous Baker" with a null
 handle** — you always see your own name.
+
+---
+
+## Notifications (13)
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET`&nbsp;/&nbsp;`PUT` | `/notifications/settings` | Quiet hours, per-event channel map, digest prefs. Unknown event names are `422`. |
+| `GET` | `/notifications/events` | Every reminder the service sends, with its urgency and whether it ignores quiet hours. |
+| `GET` | `/notifications/channels` | Configured destinations. `target` is recognisable but never reusable. |
+| `GET` | `/notifications/vapid-key` | Public key for a browser to subscribe with. `available: false` means Web Push is not configured. |
+| `POST` | `/notifications/webpush/subscribe` | `503` when the server has no VAPID keys — better than accepting a subscription that can never be delivered. |
+| `POST` | `/notifications/channels/ntfy` | Topic + optional token. |
+| `POST` | `/notifications/channels/email` | **Must be your own verified address**, else this endpoint mails strangers. |
+| `DELETE` | `/notifications/channels/{id}` | |
+| `POST` | `/notifications/test` | Queues a test reminder; arrives within a minute. |
+| `GET` | `/notifications/inbox` | `?unread_only`. Returns items plus `unread_count`. |
+| `POST` | `/notifications/inbox/read` | `{"ids": [...]}` or `{"all": true}`. |
+| `GET` | `/notifications/scheduled` | What is queued for you — useful for clients, essential for debugging. |
+
+**Re-subscribing updates in place.** Channels are keyed by a hash of their
+destination, so the same browser or topic registered twice yields one row, and a
+previously-disabled channel is re-enabled.
+
+**Delivery semantics.** Reminders are queued in a table and drained by a beat
+tick every 60 seconds; nothing is delivered inline. Channels are attempted
+independently, so a dead push subscription cannot stop the inbox copy. A reminder
+that is delivered to at least one channel counts as sent.
+
+**Quiet hours** defer *routine* reminders to the end of the window, judged in the
+user's own timezone. **Time-critical reminders ignore them** — dough that is
+ready at 3am is ready at 3am. `GET /notifications/events` says which is which.
+
+**Stale reminders are dropped, not delivered late.** A "your dough is ready" six
+hours after the fact is wrong, not merely late.
 
 ---
 

@@ -54,8 +54,17 @@ async def refresh_leaderboard(ctx: dict[str, Any]) -> int:
 
 
 async def drain_due_notifications(ctx: dict[str, Any]) -> int:
-    """Beat tick: claim due scheduled notifications and enqueue a send per channel.
+    """Beat tick: claim every due reminder and deliver it.
 
-    Returns the number of rows claimed. Implemented in Phase 7.
+    Runs on the beat process rather than fanning out to workers: `FOR UPDATE
+    SKIP LOCKED` already makes concurrent drainers safe, and keeping the claim
+    and the send in one transaction means a crash mid-delivery leaves the row
+    claimed rather than lost.
     """
-    return 0
+    from app.db import get_session_factory
+    from app.services.notifications import drain
+
+    async with get_session_factory()() as session:
+        result = await drain(session)
+        await session.commit()
+    return result.claimed

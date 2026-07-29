@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, VerifiedUser
 from app.db import get_session
+from app.models.notification import NotificationEvent
 from app.models.starter import Feeding, Starter, StarterObservation, StarterState
 from app.schemas.starter import (
     FeedingCreate,
@@ -30,6 +31,7 @@ from app.schemas.starter import (
 from app.services import starters as starter_service
 from app.services.achievements import publish
 from app.services.events import DomainEvent
+from app.services.notifications import cancel_prefix, schedule
 
 router = APIRouter(prefix="/starters", tags=["starters"])
 
@@ -199,6 +201,7 @@ async def delete_starter(starter_id: uuid.UUID, user: VerifiedUser, session: Ses
     farmed by deleting and recreating (docs/PLAN.md §7)."""
     starter = await _get_owned_starter(starter_id, user.id, session)
     starter.deleted_at = datetime.now(UTC)
+    await cancel_prefix(session, f"starter:{starter.id}:")
 
 
 # --- feedings ---------------------------------------------------------------
@@ -252,6 +255,22 @@ async def log_feeding(
         source_type="feeding",
         source_id=feeding.id,
     )
+
+    if starter.state in SCHEDULED_STATES:
+        entry = starter_service.compute_schedule(fed_at, starter.feed_interval_hours, now)
+        if entry.next_due_at is not None:
+            await schedule(
+                session,
+                user_id=user.id,
+                event=NotificationEvent.starter_feed_due,
+                due_at=entry.next_due_at,
+                dedupe_key=f"starter:{starter.id}:feed_due",
+                payload={"starter_name": starter.name, "starter_id": str(starter.id)},
+            )
+    else:
+        # Dormant and retired starters are off the schedule entirely.
+        await cancel_prefix(session, f"starter:{starter.id}:")
+
     return FeedingResponse.model_validate(feeding)
 
 
