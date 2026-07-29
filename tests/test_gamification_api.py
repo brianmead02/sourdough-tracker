@@ -357,14 +357,15 @@ async def test_leaderboard_ranks_by_season_xp(client: AsyncClient, outbox: Outbo
 
     board = (await client.get("/api/v1/leaderboard?limit=100", headers=busy)).json()
     assert board["season_name"].startswith("20")
-    xp_values = [row["season_xp"] for row in board["rows"]]
-    assert xp_values == sorted(xp_values, reverse=True), "the page is ordered by score"
 
-    # Positions are checked via /me: the board spans the whole service, so a
-    # fresh account is not expected on the first page.
-    busy_rank = (await client.get("/api/v1/leaderboard/me", headers=busy)).json()
-    quiet_rank = (await client.get("/api/v1/leaderboard/me", headers=quiet)).json()
-    assert busy_rank["rank"] < quiet_rank["rank"], "three bakes outrank one"
+    # With an isolated database the whole board is these two accounts, so the
+    # ordering can be asserted exactly rather than approximately.
+    assert len(board["rows"]) == 2
+    assert [row["rank"] for row in board["rows"]] == [1, 2]
+    assert board["rows"][0]["is_you"] is True, "three bakes outrank one"
+    assert board["rows"][0]["season_xp"] > board["rows"][1]["season_xp"]
+    assert board["rows"][0]["bake_count"] == 3
+    assert board["rows"][1]["bake_count"] == 1
 
 
 async def test_category_boards_order_differently(client: AsyncClient, outbox: Outbox) -> None:
@@ -379,32 +380,39 @@ async def test_category_boards_order_differently(client: AsyncClient, outbox: Ou
 
 
 async def test_a_private_profile_ranks_anonymously(client: AsyncClient, outbox: Outbox) -> None:
-    """Opting out of a public profile must not mean opting out of competing.
-
-    Asserted through `/leaderboard/me`, which finds the user's own row whatever
-    their position: the board spans every account on the service, so a page of
-    the top N is not a reliable place to look for a specific baker.
-    """
+    """Opting out of a public profile must not mean opting out of competing."""
     private, account = await register_user(client, outbox)
+    viewer, _ = await register_user(client, outbox)
     await complete_a_bake(client, private, title="Quiet loaf")
     await refresh_leaderboard()
 
-    mine = (await client.get("/api/v1/leaderboard/me", headers=private)).json()
-    own_row = next(row for row in mine["neighbours"] if row["is_you"])
-    assert own_row["handle"] == account["handle"], "you always see yourself"
-    assert mine["rank"] is not None, "a private profile still ranks"
+    # What a *different* baker sees: a ranked row with no identifying detail.
+    board = (await client.get("/api/v1/leaderboard?limit=100", headers=viewer)).json()
+    theirs = next(row for row in board["rows"] if not row["is_you"])
+    assert theirs["handle"] is None
+    assert theirs["display_name"] == "Anonymous Baker"
+    assert theirs["rank"] == 1, "they still hold a position"
+    assert theirs["season_xp"] > 0, "and their score is still shown"
+    assert account["handle"] not in {row["handle"] for row in board["rows"]}
+
+    # ...and what they see themselves.
+    own = (await client.get("/api/v1/leaderboard?limit=100", headers=private)).json()
+    mine = next(row for row in own["rows"] if row["is_you"])
+    assert mine["handle"] == account["handle"]
 
 
 async def test_a_public_profile_is_named(client: AsyncClient, outbox: Outbox) -> None:
     author, account = await register_user(client, outbox)
+    viewer, _ = await register_user(client, outbox)
     await client.patch("/api/v1/profiles/me", json={"is_public": True}, headers=author)
     await complete_a_bake(client, author, title="Proud loaf")
     await refresh_leaderboard()
 
-    mine = (await client.get("/api/v1/leaderboard/me", headers=author)).json()
-    own_row = next(row for row in mine["neighbours"] if row["is_you"])
-    assert own_row["handle"] == account["handle"]
-    assert own_row["display_name"] != "Anonymous Baker"
+    # Publishing a profile means other bakers see the name.
+    board = (await client.get("/api/v1/leaderboard?limit=100", headers=viewer)).json()
+    theirs = next(row for row in board["rows"] if not row["is_you"])
+    assert theirs["handle"] == account["handle"]
+    assert theirs["display_name"] != "Anonymous Baker"
 
 
 async def test_my_rank_reports_neighbours(client: AsyncClient, outbox: Outbox) -> None:

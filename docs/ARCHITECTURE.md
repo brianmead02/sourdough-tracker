@@ -468,7 +468,7 @@ eta  = target_rise_fraction / rate
 | Layer | Count | Runs against |
 |---|---|---|
 | Unit | 205 | Nothing — pure functions and static assets |
-| Integration | 193 | Live Postgres, Redis, MinIO and ntfy |
+| Integration | 217 | Live Postgres, Redis, MinIO and ntfy |
 | Browser logic | 11 | node, with browser globals stubbed |
 | Dart | 16 | `flutter test`, plus `flutter analyze` and a real APK build |
 
@@ -476,11 +476,17 @@ Integration tests are marked and deselected by default (`pytest -m integration`
 to run them). They exercise the real stack: real SMTP delivery into Mailhog, real
 uploads into MinIO with byte-for-byte read-back, real token rotation.
 
-**Known limitation:** integration tests share one database and do not truncate
-between runs. Tests that assert on globally-shared listings (leaderboards, public
-recipes) must scope to their own data or use `/me`-style endpoints, because the
-shared database now holds thousands of accounts. Three tests were rewritten for
-this reason. Per-test isolation is on the Phase 10 list.
+Each integration test begins on an empty database: the `client` fixture issues
+one `TRUNCATE ... RESTART IDENTITY CASCADE` over every table except
+`alembic_version` and `achievement`. Those two are preserved deliberately —
+the first is the migration bookmark, the second the seeded badge catalogue that
+the gamification engine reads on every evaluation. Truncating either would mean
+re-running a migration or a seed per test.
+
+The trade-off taken is **isolation over parallelism**: workers sharing a
+database would truncate each other's rows, so `-n auto` is not available. Sixty
+seconds of serial integration tests is a better deal than assertions that have
+to be written vaguely enough to survive a thousand other tests' leftovers.
 
 ---
 
@@ -496,11 +502,53 @@ this reason. Per-test isolation is on the Phase 10 list.
 | `inventory_item.qty_on_hand` column | Derived from the ledger | A counter and a ledger drift; the ledger is also the audit trail |
 | Redis sorted set for leaderboards | Rollup table only | The rollup is already a cache; Redis would be a third copy |
 | Phase 3 includes reminder rescheduling | `predicted_end_at` seam only | The scheduler table is Phase 7's design; a half-built version would be worse than a clean seam |
-| Bakes have `is_public` | Not built | Public bakes belong with the moderation queue in Phase 10 |
+| Bakes have `is_public` | Not built | Nothing needs it: the moderation queue covers public recipes, which are the whole public surface |
+| Admin/moderation **UI** | API only | The eight endpoints are the hard part and are testable; a page over them is a client decision |
+| Soft delete everywhere | Hard delete for account erasure | Soft delete exists to stop XP farming, which is not a reason to keep data someone asked to have removed |
 
 ---
 
-## 11. What is not built yet
+## 11. Operations surface
 
-- **Phase 10 — Admin/moderation UI, backups, data export, load testing,
-  per-test database isolation.**
+Phase 10 added what an instance needs in order to be run *for other people*
+rather than by its author.
+
+**Moderation** (`app/api/v1/admin.py`, `require_role(UserRole.moderator)`) —
+user search, suspend/unsuspend, a queue of published recipes, and unpublish.
+Two invariants are enforced in code rather than by convention: an administrator
+cannot be suspended, and nobody can suspend themselves. Suspension revokes every
+refresh token, because the per-request suspension check would otherwise be
+bypassed by a token minted before it.
+
+Unpublish is not delete. Moderation should be reversible, and hiding someone's
+work from the public is a materially smaller act than destroying their copy of
+it.
+
+**Account self-service** (`app/services/account.py`) — export and erasure.
+Export walks the same relationships the API does, redacting `password_hash`,
+`token_hash` and `target_hash` via one `REDACTED` set, and emits photos as
+signed URLs rather than bytes. Erasure requires the current password *and* the
+literal phrase `DELETE MY ACCOUNT`, then hard-deletes. Two things survive
+because they were never the deleting user's to erase: **forks other people
+made** (the parent link is nulled, the copy stays intact) and **star counts they
+inflated**, which are decremented rather than left overstated.
+
+**Backups** (`scripts/backup.sh`) — `pg_dump -Fc` plus a MinIO mirror, written
+to `.partial` and renamed on success so cron can never leave a half-file that
+looks complete. Redis is deliberately excluded: a job queue and rate-limit
+counters both regenerate.
+
+**Load test** (`scripts/loadtest.py`) — httpx only, no new dependency. At 25
+concurrent users it sustained **375 req/s over 3025 requests with zero errors**;
+the slowest path was `POST /starters` at p95 390 ms, which is the expected
+answer, since creating a starter runs the achievement evaluation.
+
+**Demo data** (`sdt seed-demo`) — one account with three weeks of plausible
+history: a 21-feed streak, seven bakes, 825 XP and nine badges. Enough for a
+client developer to see every screen populated without inventing fixtures.
+
+## 12. What is not built yet
+
+- **Admin/moderation web UI** — the endpoints exist; no page renders them.
+- **Public bakes** — recipes are the shareable unit; bakes stay private.
+- **Parallel integration tests** — would need a database per worker.

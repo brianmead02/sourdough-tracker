@@ -1,6 +1,6 @@
 # API Reference
 
-88 endpoints under `/api/v1`. The live, always-accurate contract is the OpenAPI
+96 endpoints under `/api/v1`. The live, always-accurate contract is the OpenAPI
 schema — this document covers the **semantics that a schema cannot express**:
 which errors mean what, which operations are idempotent, and where a status code
 was chosen deliberately.
@@ -272,6 +272,42 @@ ready at 3am is ready at 3am. `GET /notifications/events` says which is which.
 
 **Stale reminders are dropped, not delivered late.** A "your dough is ready" six
 hours after the fact is wrong, not merely late.
+
+---
+
+## Admin (6)
+
+**Moderator or admin only.** Everything here returns `403` to an ordinary user.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/admin/users` | `?q=` matches email or handle. Rows carry public-recipe and bake counts. |
+| `POST` | `/admin/users/{id}/suspend` | Needs a `reason`. Takes effect on the account's **next request** and revokes every refresh token. `409` on yourself; `403` on an administrator. |
+| `POST` | `/admin/users/{id}/unsuspend` | Restores access. Previously revoked tokens stay revoked. |
+| `GET` | `/admin/moderation/queue` | Published recipes, `?order=newest\|most_starred`. |
+| `POST` | `/admin/recipes/{id}/unpublish` | Withdraws from public view; **the author keeps their copy**. Moderation should be reversible. |
+| `GET` | `/admin/stats` | Instance counts, pending/failed notifications, database size. |
+
+An administrator cannot be suspended, and nobody can suspend themselves — one
+compromised moderator should not be able to lock out the operators.
+
+---
+
+## Account (2)
+
+Self-service on your own data. Any authenticated user.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/account/export` | Everything the service holds, as a JSON attachment. Photos appear as time-limited signed URLs rather than bytes. **Credentials are excluded** — a password hash is a secret, not personal data. |
+| `POST` | `/account/delete` | Permanent erasure. Requires the current password **and** `confirm: "DELETE MY ACCOUNT"` exactly. |
+
+Erasure is a **hard delete**, unlike the soft delete used elsewhere: soft
+deletion exists to stop XP farming, which is not a reason to keep someone's data
+after they have asked for it to go. Two things deliberately survive, because
+they are not the deleting user's to erase — **forks other people made** (the
+parent link is nulled, the copy stays whole) and **the star counts they
+inflated**, which are decremented rather than left overstated.
 
 ---
 

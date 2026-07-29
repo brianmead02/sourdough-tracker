@@ -42,8 +42,23 @@ docker compose exec api ruff format app tests
 docker compose exec api ruff check . --fix
 docker compose exec api mypy app
 docker compose exec api pytest -q                 # unit only, ~1s
-docker compose exec api pytest -q -m integration  # needs the live stack, ~23s
+docker compose exec api pytest -q -m integration  # needs the live stack, ~65s
 ```
+
+Working on a client and want something to look at? Seed a populated account
+rather than clicking through a fresh one:
+
+```bash
+docker compose exec api sdt seed-demo
+```
+
+It prints the credentials and builds three weeks of plausible history — a
+21-feed streak, seven completed bakes, 825 XP, nine badges, a stocked pantry.
+The history is generated from a fixed seed, so two runs produce the same numbers
+and a screenshot stays reproducible. It refuses to run a second time over an
+existing `demo@example.com` (pass `--email` for another), and refuses outright
+when `ENVIRONMENT=prod` — fabricated bakes on a real leaderboard would be
+indistinguishable from cheating.
 
 **Web app** — no build step, no `node_modules`; node is only for the tests:
 
@@ -67,7 +82,7 @@ CI runs all of these, plus a Docker build.
 | Layer | Count | Speed | Touches |
 |---|---|---|---|
 | Python unit | 205 | ~1 s | Nothing — pure functions and static assets |
-| Python integration | 193 | ~23 s | Postgres, Redis, MinIO, ntfy |
+| Python integration | 217 | ~65 s | Postgres, Redis, MinIO, ntfy |
 | Browser logic | 11 | <1 s | node, with browser globals stubbed |
 | Dart | 16 | ~2 s | `flutter test` |
 
@@ -80,11 +95,23 @@ really go to MinIO and are read back byte-for-byte.
 test when the behaviour *is* the wiring — ownership checks, status codes,
 transaction boundaries.
 
-> **Known limitation.** Integration tests share one database and never truncate.
-> Anything asserting on a globally-shared listing (leaderboards, public recipes)
-> must scope to its own data — use a `uuid4()` suffix, or `/leaderboard/me`
-> instead of paging the board. Three tests had to be rewritten after the shared
-> database grew past a thousand accounts. Per-test isolation is Phase 10 work.
+**Every integration test starts on an empty database.** The `client` fixture
+calls `truncate_all()`, which issues one
+`TRUNCATE ... RESTART IDENTITY CASCADE` across every table except
+`alembic_version` and `achievement` — the migration bookmark and the seeded
+badge catalogue, both of which are fixtures rather than test data. The table
+list is discovered once and the statement cached, so the cost is a few
+milliseconds per test rather than a query round-trip.
+
+This is why assertions can be exact. Tests written before isolation existed had
+to scope themselves to their own data (a `uuid4()` suffix, `/leaderboard/me`
+instead of paging the board) because a shared database had grown past a thousand
+accounts. If you find a test doing that defensively, it can now assert on the
+real thing.
+
+The cost is that tests **cannot run in parallel** against one database — `-n
+auto` would have workers truncating each other's rows. If that becomes worth
+having, give each worker its own database rather than dropping the truncate.
 
 ---
 
