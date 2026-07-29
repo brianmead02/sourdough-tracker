@@ -4,12 +4,11 @@ Running Sourdough Tracker for real: a public, multi-tenant service on the
 internet. If you only want it on your laptop, use
 [QUICKSTART.md](QUICKSTART.md) instead.
 
-> **Status.** Phases 0–9 are complete: the server is feature-complete, a
-> deployment serves the installable web app at `/` alongside the API, and an
-> Android APK can be built from `mobile/`. **Not yet built (Phase 10):**
-> admin and moderation tooling, automated backups, data export, and load
-> testing. Deploy accordingly — in particular, moderation of public recipes is
-> currently a `psql` session.
+> **Status.** All ten phases are complete. The server is feature-complete, a
+> deployment serves the installable web app at `/` alongside the API, an Android
+> APK can be built from `mobile/`, and moderation, backups, data export and
+> erasure are available. There is no admin *page* — moderation is six endpoints
+> under `/api/v1/admin`, documented in [HOWTO.md](HOWTO.md).
 
 ---
 
@@ -205,26 +204,60 @@ user's feedings to compute streaks. That is fine for thousands of users and will
 need attention long before millions. The rollup runs on a worker, not in a
 request, so it degrades into staleness rather than latency.
 
+### Measuring it
+
+`scripts/loadtest.py` drives a realistic session — create a starter, then loop
+over the reads a client actually makes, plus a bake and a completion:
+
+```bash
+docker compose exec api python scripts/loadtest.py --users 25 --requests 10
+```
+
+On a single-container dev stack this returned **3025 requests from 25
+concurrent users in 8.1 s — 375 req/s, zero errors**. The slowest endpoint was
+`POST /starters` at p95 390 ms, which is the answer you want: creating a starter
+runs the achievement evaluation, so it *should* be the expensive one. If a plain
+`GET` ever tops that table, something has regressed.
+
+One gotcha: registration is rate-limited to 5/hour **per IP**, and every virtual
+baker shares one. Run it with `RATE_LIMIT_ENABLED=false` and a flushed Redis, or
+you will measure the limiter. The script says so rather than silently running a
+smaller test than you asked for.
+
 ---
 
 ## 6. Backups
 
-Not yet automated — this is Phase 10 work. Until then, at minimum:
+`scripts/backup.sh` takes both stores in one pass:
 
 ```bash
-# Postgres — the system of record
-docker compose exec -T postgres pg_dump -U sourdough sourdough | gzip > db-$(date +%F).sql.gz
-
-# MinIO — the photos
-docker run --rm -v sourdough_minio_data:/data -v "$PWD:/backup" alpine \
-  tar czf /backup/minio-$(date +%F).tar.gz /data
+./scripts/backup.sh /var/backups/sourdough
 ```
+
+It writes `db-<stamp>.dump` (`pg_dump -Fc`, compressed and selectively
+restorable with `pg_restore`) and `media-<stamp>.tar.gz` from the MinIO bucket.
+Both are written under a `.partial` name and renamed only on success, so an
+interrupted run can never leave a half-file that looks like a good backup —
+which matters, because whatever reads this directory is usually picking "the
+newest file".
+
+Cron it:
+
+```cron
+17 3 * * * cd /opt/sourdough && BACKUP_KEEP_DAYS=30 ./scripts/backup.sh /var/backups/sourdough >> /var/log/sourdough-backup.log 2>&1
+```
+
+`BACKUP_KEEP_DAYS` prunes older files (default 30; `0` keeps everything).
 
 Restore:
 
 ```bash
-gunzip -c db-2026-07-28.sql.gz | docker compose exec -T postgres psql -U sourdough sourdough
+docker compose exec -T postgres pg_restore -U sourdough -d sourdough --clean --if-exists < db-<stamp>.dump
+tar xzf media-<stamp>.tar.gz -C /tmp && mc mirror /tmp/media dst/sourdough-media
 ```
+
+**Both stores or neither.** Postgres holds every row and MinIO holds the photos;
+restoring one alone leaves bakes pointing at objects that are not there.
 
 **Test a restore before you need one.** A backup you have never restored is a
 hypothesis, not a backup.

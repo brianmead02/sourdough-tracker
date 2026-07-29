@@ -19,9 +19,11 @@ docker compose exec api sdt create-admin
 ```
 
 Admin accounts are created **pre-verified** — they are made out-of-band by an
-operator, so there is no email round-trip to complete. The only admin-gated
-endpoint today is `POST /leaderboard/refresh`; the moderation surface arrives in
-Phase 10.
+operator, so there is no email round-trip to complete.
+
+Two role gates exist. `POST /leaderboard/refresh` needs **admin**; everything
+under `/api/v1/admin` needs **moderator or above**, so a trusted volunteer can
+moderate recipes without being able to force a leaderboard rollup.
 
 ## Reset a user's password
 
@@ -163,29 +165,75 @@ raise `FERMENT_Q10_COLD`; these numbers are a starting point, not measured truth
 Changing coefficients does **not** rewrite existing sessions — each stores the
 `vigour_used` and window it was created with, so old predictions stay explicable.
 
-## Moderate content without an admin UI
+## Moderate content
 
-Phase 10 adds proper tooling. Until then it is `psql`, and these are the
-statements that matter:
+There is no admin page — there are endpoints, and they need a moderator or admin
+token. Promote someone first:
 
-```sql
--- Suspend an account: takes effect on the very next request, and drops them
--- from leaderboards and public recipe listings on the next rollup.
-UPDATE "user" SET is_suspended = true, suspended_reason = 'spam'
-WHERE email = 'them@example.com';
-
--- Unpublish a single recipe without deleting the author's copy.
-UPDATE recipe SET is_public = false WHERE id = '<uuid>';
-
--- Find recently published recipes to review.
-SELECT r.id, r.name, p.handle, r.created_at
-FROM recipe r JOIN user_profile p ON p.user_id = r.owner_id
-WHERE r.is_public AND r.deleted_at IS NULL
-ORDER BY r.created_at DESC LIMIT 20;
+```bash
+docker compose exec api sdt create-admin       # or set role on an existing row
 ```
 
+Review the public surface, which is entirely published recipes:
+
+```bash
+curl -s "localhost:8000/api/v1/admin/moderation/queue?order=newest&limit=20"   -H "$AUTH" | jq -r '.[] | "\(.owner_handle)  \(.name)  ★\(.star_count)"'
+```
+
+Withdraw one from public view. **This is not a delete** — the author keeps their
+copy, and re-publishing is theirs to do:
+
+```bash
+curl -X POST "localhost:8000/api/v1/admin/recipes/$ID/unpublish" -H "$AUTH"
+```
+
+Find and suspend an account. Suspension takes effect on their **very next
+request** and revokes every refresh token, so a session already in flight cannot
+outlive it:
+
+```bash
+curl -s "localhost:8000/api/v1/admin/users?q=them@example.com" -H "$AUTH" | jq
+curl -X POST "localhost:8000/api/v1/admin/users/$UID/suspend" -H "$AUTH"   -H 'content-type: application/json' -d '{"reason":"spam"}'
+```
+
+Two refusals are deliberate: you cannot suspend yourself (`409`), and nobody can
+suspend an administrator (`403`). One compromised moderator account should not be
+able to lock the operators out of their own instance.
+
+Unsuspending restores access but does **not** un-revoke the old tokens — they log
+in again.
+
 Photos are private by default and only reachable through signed URLs, so an
-unpublished recipe's images are not exposed.
+unpublished recipe's images are not exposed either way.
+
+## Answer a data request
+
+Both halves of GDPR are self-service, so an operator is not in the loop at all:
+
+```bash
+curl -s localhost:8000/api/v1/account/export -H "$AUTH" -OJ    # a JSON file
+
+curl -X POST localhost:8000/api/v1/account/delete -H "$AUTH"   -H 'content-type: application/json'   -d '{"password":"...","confirm":"DELETE MY ACCOUNT"}'
+```
+
+The export excludes password and token hashes — those are secrets, not personal
+data — and renders photos as time-limited signed URLs rather than embedding
+bytes.
+
+Deletion is immediate, permanent, and has no grace period, which is why it wants
+the password *and* the exact phrase. Recipes other people forked survive with the
+parent link nulled; stars the deleted account gave are decremented from the
+recipes that received them.
+
+## Check on the instance
+
+```bash
+curl -s localhost:8000/api/v1/admin/stats -H "$AUTH" | jq
+```
+
+Users, starters, bakes, public recipes, pending and failed notifications, and
+the database size. The number to watch is **failed notifications**: a climbing
+count means a channel is misconfigured, not that bakers stopped baking.
 
 ## Build and distribute the Android app
 

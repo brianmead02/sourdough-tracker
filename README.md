@@ -6,10 +6,9 @@ achievements and seasonal leaderboards across the whole service.
 
 Built as a `docker-compose` stack around a FastAPI backend.
 
-**Status: phases 0–9 complete.** A feature-complete server, an installable web
-app served at `/`, and an Android app that builds to a real APK. What remains is
-Phase 10 — admin and moderation tooling, automated backups, data export and load
-testing.
+**Status: all ten phases complete.** A feature-complete server, an installable
+web app served at `/`, an Android app that builds to a real APK, and the
+operational surface needed to run it for other people.
 
 ---
 
@@ -72,6 +71,8 @@ Production, including the settings that must change:
   completing a bake tells you what the loaf actually cost.
 - **Gamification** — 44 achievements, XP, six leaderboard categories and
   quarterly seasons, with anti-cheat that assumes the internet is watching.
+- **Operations** — moderation and suspension, instance stats, a backup script,
+  and one-click data export and account erasure.
 - **Two clients** — an installable PWA and an Android app, both with live proof
   countdowns, one-tap feeding, and an offline outbox so bad kitchen wifi never
   loses a feeding.
@@ -102,6 +103,7 @@ sdt seed-achievements                 # project the code catalogue into the DB
 sdt recompute-xp --yes                # rebuild the entire XP ledger from history
 sdt refresh-leaderboard               # rebuild the leaderboard rollup now
 sdt vapid-keys                        # generate a Web Push keypair for .env
+sdt seed-demo                         # a demo account with three weeks of history
 sdt db upgrade | downgrade | revision | current
 ```
 
@@ -109,7 +111,7 @@ sdt db upgrade | downgrade | revision | current
 
 ```bash
 docker compose exec api pytest -q                 # 205 unit, no I/O, ~1s
-docker compose exec api pytest -q -m integration  # 193 against live services
+docker compose exec api pytest -q -m integration  # 217 against live services
 docker compose exec api sh -c "ruff check . && ruff format --check . && mypy app"
 node --test web/test/app.test.mjs                 # 11 browser-logic tests
 cd mobile && flutter analyze && flutter test      # 16 Dart tests

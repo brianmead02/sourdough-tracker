@@ -4,9 +4,10 @@ from collections.abc import AsyncIterator, Iterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 
 from app.config import get_settings
-from app.db import dispose_engine
+from app.db import dispose_engine, get_session_factory
 from app.main import create_app
 from app.queue import dispose_arq_pool
 from app.services import security
@@ -30,14 +31,47 @@ def test_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     security.reset_caches()
 
 
+# Reference data, not test data. `achievement` is a projection of the code
+# catalogue seeded once by `sdt seed-achievements`; wiping it would break the
+# foreign key from user_achievement and force a re-seed on every single test.
+PRESERVED_TABLES = {"alembic_version", "achievement"}
+
+# Built once per session — the schema does not change mid-run.
+_truncate_statement: str | None = None
+
+
+async def truncate_all() -> None:
+    """Empty every table of test data.
+
+    Integration tests used to share one accumulating database, which made
+    anything asserting on a global listing — leaderboards, public recipes —
+    order-dependent and quietly wrong once a few hundred accounts had built up.
+    Three tests had to be weakened to work around it. Truncating per test is
+    cheap (the tables are almost always empty) and removes the whole class of
+    problem.
+    """
+    global _truncate_statement
+    async with get_session_factory()() as session:
+        if _truncate_statement is None:
+            rows = await session.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+            )
+            tables = [t for (t,) in rows.all() if t not in PRESERVED_TABLES]
+            quoted = ", ".join(f'"{name}"' for name in tables)
+            _truncate_statement = f"TRUNCATE {quoted} RESTART IDENTITY CASCADE"
+        await session.execute(text(_truncate_statement))
+        await session.commit()
+
+
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
-    """HTTP client bound to the ASGI app, with connection pools torn down after.
+    """HTTP client bound to the ASGI app, against a freshly emptied database.
 
     The engine and ARQ pool are process-global and lazily created, but each test
     gets its own event loop. Without disposal the next test inherits connections
     bound to a closed loop and fails with `Event loop is closed`.
     """
+    await truncate_all()
     app = create_app()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

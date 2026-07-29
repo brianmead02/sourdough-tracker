@@ -257,7 +257,7 @@ offline queue via Drift, biometric unlock for the stored refresh token.
 | 7 | Notifications | ✅ Scheduler table + beat drain, four channels, prefs, quiet hours | 3 d |
 | 8 | PWA | ✅ All screens, service worker, Web Push, offline outbox, vendored deps | 4–5 d |
 | 9 | Flutter | ✅ Generated client, core screens, ntfy push, offline outbox (camera deferred) | 5–6 d |
-| 10 | Hardening | Admin/moderation UI, backups, data export (GDPR), load test, docs, seed data | 2–3 d |
+| 10 | Hardening | ✅ Admin/moderation API, backup script, export + erasure, load test, demo seed, per-test DB isolation | 2–3 d |
 
 **~30–35 working days** for one developer at full scope. Phases 0–7 (server complete, API
 usable) land around day 18.
