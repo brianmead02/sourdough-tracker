@@ -36,6 +36,23 @@ async def send_email(ctx: dict[str, Any], to: str, subject: str, body: str) -> N
     await deliver(to, subject, body)
 
 
+async def enqueue_leaderboard_refresh(ctx: dict[str, Any]) -> None:
+    """Beat cron: hand the rollup to a worker rather than doing it on the beat."""
+    await ctx["redis"].enqueue_job("refresh_leaderboard", _queue_name=WORK_QUEUE)
+
+
+async def refresh_leaderboard(ctx: dict[str, Any]) -> int:
+    """Rebuild the leaderboard rollup. Idempotent, so a missed run self-heals."""
+    from app.db import get_session_factory
+    from app.services.leaderboard import refresh
+
+    async with get_session_factory()() as session:
+        result = await refresh(session)
+        await session.commit()
+    logger.info("leaderboard refresh: %d users ranked", result.users_ranked)
+    return result.users_ranked
+
+
 async def drain_due_notifications(ctx: dict[str, Any]) -> int:
     """Beat tick: claim due scheduled notifications and enqueue a send per channel.
 

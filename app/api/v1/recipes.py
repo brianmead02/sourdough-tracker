@@ -23,6 +23,9 @@ from app.schemas.recipe import (
     ScaledRecipeResponse,
 )
 from app.services import recipes as recipe_service
+from app.services.achievements import publish
+from app.services.events import DomainEvent
+from app.services.xp import source_id_for
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
@@ -87,6 +90,17 @@ async def create_recipe(
             status_code=status.HTTP_409_CONFLICT,
             detail="You already have a recipe with that name",
         ) from exc
+    await publish(
+        db, DomainEvent.recipe_created, user_id=user.id, source_type="recipe", source_id=recipe.id
+    )
+    if recipe.is_public:
+        await publish(
+            db,
+            DomainEvent.recipe_published,
+            user_id=user.id,
+            source_type="recipe",
+            source_id=recipe.id,
+        )
     return RecipeResponse.model_validate(recipe)
 
 
@@ -192,6 +206,14 @@ async def update_recipe(
             status_code=status.HTTP_409_CONFLICT,
             detail="You already have a recipe with that name",
         ) from exc
+    if recipe.is_public:
+        await publish(
+            db,
+            DomainEvent.recipe_published,
+            user_id=user.id,
+            source_type="recipe",
+            source_id=recipe.id,
+        )
     return RecipeResponse.model_validate(recipe)
 
 
@@ -288,6 +310,15 @@ async def fork_recipe(recipe_id: uuid.UUID, user: VerifiedUser, db: SessionDep) 
             status_code=status.HTTP_409_CONFLICT,
             detail="You already have a recipe with that name",
         ) from exc
+    if source.owner_id != user.id:
+        # Credit lands on the author, not the person doing the forking.
+        await publish(
+            db,
+            DomainEvent.recipe_forked,
+            user_id=source.owner_id,
+            source_type="fork",
+            source_id=fork.id,
+        )
     return RecipeResponse.model_validate(fork)
 
 
@@ -310,6 +341,13 @@ async def star_recipe(
     db.add(RecipeStar(user_id=user.id, recipe_id=recipe.id))
     recipe.star_count += 1
     await db.flush()
+    await publish(
+        db,
+        DomainEvent.recipe_starred,
+        user_id=recipe.owner_id,
+        source_type="star",
+        source_id=source_id_for(f"star:{user.id}:{recipe.id}"),
+    )
 
 
 @router.delete("/{recipe_id}/star", status_code=status.HTTP_204_NO_CONTENT)

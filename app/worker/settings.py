@@ -17,7 +17,9 @@ from app.worker.tasks import (
     WORK_QUEUE,
     drain_due_notifications,
     enqueue_heartbeat,
+    enqueue_leaderboard_refresh,
     heartbeat,
+    refresh_leaderboard,
     send_email,
 )
 
@@ -42,7 +44,7 @@ async def _shutdown(ctx: dict[str, Any]) -> None:
 
 
 class WorkerSettings:
-    functions: ClassVar[list[Any]] = [heartbeat, send_email]
+    functions: ClassVar[list[Any]] = [heartbeat, send_email, refresh_leaderboard]
     queue_name = WORK_QUEUE
     redis_settings = _redis_settings()
     on_startup = _startup
@@ -58,6 +60,9 @@ class BeatSettings:
         # cannot double-fire the same tick.
         cron(drain_due_notifications, second=0, run_at_startup=False),
         cron(enqueue_heartbeat, minute={0, 15, 30, 45}, second=0, run_at_startup=True),
+        # Leaderboards are a rollup, not live aggregates: refreshed every 5
+        # minutes, which is well inside what anyone notices on a board.
+        cron(enqueue_leaderboard_refresh, minute=set(range(0, 60, 5)), second=30),
     ]
     queue_name = BEAT_QUEUE
     redis_settings = _redis_settings()

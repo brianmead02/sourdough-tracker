@@ -7,6 +7,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.bake import BakeStatus, PhotoKind
+from app.schemas.gamification import AwardResponse
 from app.schemas.inventory import ConsumptionResponse
 
 Score = Annotated[int, Field(ge=1, le=5)]
@@ -137,6 +138,12 @@ class BakeResponse(BaseModel):
 
 
 class BakeCompleteResponse(BakeResponse):
-    """Completion also reports what it drew from stock, if anything."""
+    """Completion reports what it drew from stock and what it earned.
+
+    Awards are surfaced here because finishing a bake is the moment they matter;
+    everywhere else they are picked up from the gamification endpoints.
+    """
 
     inventory: "ConsumptionResponse | None" = None
+    xp_gained: int = 0
+    awards: list[AwardResponse] = Field(default_factory=list)

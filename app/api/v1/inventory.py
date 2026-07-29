@@ -23,6 +23,8 @@ from app.schemas.inventory import (
     TransactionResponse,
 )
 from app.services import inventory as inventory_service
+from app.services.achievements import publish
+from app.services.events import DomainEvent
 from app.services.starters import CLOCK_SKEW_ALLOWANCE, MAX_BACKDATE
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -251,6 +253,14 @@ async def add_transaction(
     )
     db.add(transaction)
     await db.flush()
+    if payload.kind is TransactionKind.purchase:
+        await publish(
+            db,
+            DomainEvent.inventory_purchased,
+            user_id=user.id,
+            source_type="inventory_transaction",
+            source_id=transaction.id,
+        )
     return TransactionResponse.model_validate(transaction)
 
 

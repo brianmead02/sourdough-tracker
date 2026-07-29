@@ -28,6 +28,8 @@ from app.schemas.starter import (
     SuggestFeedRequest,
 )
 from app.services import starters as starter_service
+from app.services.achievements import publish
+from app.services.events import DomainEvent
 
 router = APIRouter(prefix="/starters", tags=["starters"])
 
@@ -85,6 +87,13 @@ async def create_starter(
             status_code=status.HTTP_409_CONFLICT,
             detail="You already have a starter with that name",
         ) from exc
+    await publish(
+        session,
+        DomainEvent.starter_created,
+        user_id=user.id,
+        source_type="starter",
+        source_id=starter.id,
+    )
     return StarterResponse.model_validate(starter)
 
 
@@ -236,6 +245,13 @@ async def log_feeding(
     )
     session.add(feeding)
     await session.flush()
+    await publish(
+        session,
+        DomainEvent.feeding_logged,
+        user_id=user.id,
+        source_type="feeding",
+        source_id=feeding.id,
+    )
     return FeedingResponse.model_validate(feeding)
 
 
@@ -300,6 +316,13 @@ async def log_observation(
     )
     session.add(observation)
     await session.flush()
+    await publish(
+        session,
+        DomainEvent.observation_logged,
+        user_id=user.id,
+        source_type="observation",
+        source_id=observation.id,
+    )
     return ObservationResponse.model_validate(observation)
 
 

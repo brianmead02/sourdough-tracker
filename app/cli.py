@@ -121,6 +121,98 @@ def create_admin(
         raise typer.Exit(code=1) from exc
 
 
+@app.command("seed-achievements")
+def seed_achievements() -> None:
+    """Project the code catalogue into the achievement table."""
+
+    async def _seed() -> None:
+        from sqlalchemy.dialects.postgresql import insert
+
+        from app.db import dispose_engine, get_session_factory
+        from app.models.gamification import Achievement
+        from app.services.achievements import ACHIEVEMENTS
+
+        async with get_session_factory()() as session:
+            for definition in ACHIEVEMENTS:
+                values = {
+                    "code": definition.code,
+                    "name": definition.name,
+                    "description": definition.description,
+                    "category": definition.category,
+                    "rarity": definition.rarity,
+                    "xp_award": definition.xp_award,
+                    "icon": definition.icon,
+                    "target": definition.target,
+                    "criteria": {"metric": definition.metric.value, **definition.criteria},
+                    "requires_photo": definition.requires_photo,
+                }
+                await session.execute(
+                    insert(Achievement)
+                    .values(**values)
+                    .on_conflict_do_update(
+                        index_elements=["code"],
+                        set_={k: v for k, v in values.items() if k != "code"},
+                    )
+                )
+            await session.commit()
+        typer.secho(f"seeded {len(ACHIEVEMENTS)} achievements", fg=typer.colors.GREEN)
+        await dispose_engine()
+
+    asyncio.run(_seed())
+
+
+@app.command("recompute-xp")
+def recompute_xp(
+    confirm: bool = typer.Option(False, "--yes", help="Required: this rewrites the ledger."),
+) -> None:
+    """Rebuild the XP ledger and achievements from the underlying data.
+
+    This is what the append-only, source-keyed ledger buys: a rule can be
+    rebalanced and history rebuilt, rather than patched.
+    """
+    if not confirm:
+        typer.secho("refusing to rewrite the ledger without --yes", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    async def _recompute() -> None:
+        from app.db import dispose_engine, get_session_factory
+        from app.services.leaderboard import refresh
+        from app.services.replay import replay_all
+
+        async with get_session_factory()() as session:
+            result = await replay_all(session)
+            await refresh(session)
+            await session.commit()
+
+        typer.secho(
+            f"replayed {result.events} events for {result.users} users: "
+            f"{result.xp} XP, {result.achievements} achievements",
+            fg=typer.colors.GREEN,
+        )
+        await dispose_engine()
+
+    asyncio.run(_recompute())
+
+
+@app.command("refresh-leaderboard")
+def refresh_leaderboard_command() -> None:
+    """Rebuild the leaderboard rollup now."""
+
+    async def _refresh() -> None:
+        from app.db import dispose_engine, get_session_factory
+        from app.services.leaderboard import refresh
+
+        async with get_session_factory()() as session:
+            result = await refresh(session)
+            await session.commit()
+        typer.secho(
+            f"{result.season_name}: ranked {result.users_ranked} users", fg=typer.colors.GREEN
+        )
+        await dispose_engine()
+
+    asyncio.run(_refresh())
+
+
 @db_app.command("upgrade")
 def db_upgrade(revision: str = typer.Argument("head")) -> None:
     """Apply migrations up to REVISION."""

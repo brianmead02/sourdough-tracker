@@ -6,6 +6,15 @@ metadata. Later phases append to this list.
 
 from app.models.bake import Bake, BakePhoto, BakeRating, BakeStatus, PhotoKind
 from app.models.base import Base, SoftDeletable, Timestamped, UUIDPrimaryKey
+from app.models.gamification import (
+    Achievement,
+    AchievementCategory,
+    LeaderboardEntry,
+    Rarity,
+    Season,
+    UserAchievement,
+    XPEvent,
+)
 from app.models.inventory import (
     InventoryItem,
     InventoryTransaction,
@@ -37,6 +46,8 @@ from app.models.user import (
 )
 
 __all__ = [
+    "Achievement",
+    "AchievementCategory",
     "Aroma",
     "Bake",
     "BakePhoto",
@@ -49,6 +60,7 @@ __all__ = [
     "InventoryItem",
     "InventoryTransaction",
     "ItemKind",
+    "LeaderboardEntry",
     "PasswordReset",
     "PhotoKind",
     "PokeTest",
@@ -56,10 +68,12 @@ __all__ = [
     "ProofSession",
     "ProofStage",
     "ProofStatus",
+    "Rarity",
     "Recipe",
     "RecipeIngredient",
     "RecipeStar",
     "RefreshToken",
+    "Season",
     "SoftDeletable",
     "Starter",
     "StarterObservation",
@@ -68,6 +82,8 @@ __all__ = [
     "TransactionKind",
     "UUIDPrimaryKey",
     "User",
+    "UserAchievement",
     "UserProfile",
     "UserRole",
+    "XPEvent",
 ]

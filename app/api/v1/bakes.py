@@ -26,10 +26,13 @@ from app.schemas.bake import (
     RatingInput,
     RatingResponse,
 )
+from app.schemas.gamification import AwardResponse
 from app.schemas.inventory import ConsumptionResponse
 from app.schemas.proofing import ProofSessionResponse
 from app.services import inventory as inventory_service
 from app.services import storage
+from app.services.achievements import publish
+from app.services.events import DomainEvent
 from app.services.starters import CLOCK_SKEW_ALLOWANCE, MAX_BACKDATE
 
 router = APIRouter(prefix="/bakes", tags=["bakes"])
@@ -177,13 +180,26 @@ async def complete_bake(
 
     await db.flush()
 
+    gamification = await publish(
+        db,
+        DomainEvent.bake_completed,
+        user_id=user.id,
+        source_type="bake",
+        source_id=bake.id,
+    )
+
     consumption = None
     if payload.consume_inventory:
         # Never let a stock problem block recording that the bread was baked.
         result = await inventory_service.consume_for_bake(db, bake)
         consumption = ConsumptionResponse(**asdict(result))
 
-    return BakeCompleteResponse(**_to_response(bake).model_dump(), inventory=consumption)
+    return BakeCompleteResponse(
+        **_to_response(bake).model_dump(),
+        inventory=consumption,
+        xp_gained=gamification.xp_gained,
+        awards=[AwardResponse(**asdict(a)) for a in gamification.awards],
+    )
 
 
 # --- rating -----------------------------------------------------------------
@@ -203,6 +219,9 @@ async def rate_bake(
             setattr(bake.rating, field, value)
 
     await db.flush()
+    await publish(
+        db, DomainEvent.bake_rated, user_id=user.id, source_type="bake", source_id=bake.id
+    )
     return RatingResponse.model_validate(bake.rating)
 
 
@@ -252,6 +271,9 @@ async def attach_photo(
             detail="That upload is already attached to a bake",
         ) from exc
 
+    await publish(
+        db, DomainEvent.photo_added, user_id=user.id, source_type="photo", source_id=photo.id
+    )
     return PhotoResponse(
         **{f: getattr(photo, f) for f in PhotoResponse.model_fields if f != "url"},
         url=storage.presign_download(photo.object_key),
