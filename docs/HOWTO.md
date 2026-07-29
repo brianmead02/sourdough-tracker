@@ -52,6 +52,56 @@ Suspension is checked **per request**, so it takes effect before the current
 15-minute access token expires — no waiting. Suspended users also drop off
 leaderboards on the next rollup, and their public recipes disappear from browse.
 
+## Turn on Web Push
+
+```bash
+docker compose exec api sdt vapid-keys        # prints three lines for .env
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+Recreating the containers matters — `.env` is read at container creation, so
+editing it alone changes nothing.
+
+Verify before telling users it works:
+
+```bash
+curl localhost:8000/api/v1/notifications/vapid-key -H "$AUTH"
+# {"public_key":"B...","available":true}
+```
+
+Without keys the channel reports `available: false` and subscription attempts
+return 503 — deliberately, because accepting a subscription that can never be
+delivered to is worse than refusing it.
+
+## Diagnose a reminder that never arrived
+
+Reminders are rows in a table, drained by the beat worker every 60 seconds. Work
+outward from the queue:
+
+```bash
+# 1. Is it queued, and when is it due?
+docker compose exec -T postgres psql -U sourdough -d sourdough -c "SELECT event, status, due_at, attempts, last_error FROM scheduled_notification ORDER BY created_at DESC LIMIT 10;"
+
+# 2. Is the tick running at all?
+docker compose logs beat --since 10m | grep -c drain_due_notifications
+
+# 3. What happened per channel?
+docker compose exec -T postgres psql -U sourdough -d sourdough -c "SELECT channel_kind, succeeded, error, created_at FROM notification_log ORDER BY created_at DESC LIMIT 10;"
+```
+
+What the statuses mean:
+
+| Status | Meaning |
+|---|---|
+| `pending` with a future `due_at` | Working as intended — it is not due yet |
+| `pending` with `attempts > 0` | Delivery failed; backing off, will retry |
+| `cancelled` | Withdrawn (proof finished) **or expired before delivery** |
+| `failed` | Gave up after `NOTIFICATION_MAX_ATTEMPTS` |
+| `sent` | At least one channel accepted it |
+
+A reminder that expired rather than being sent is by design: a "your dough is
+ready" six hours late is wrong, not merely late.
+
 ## Fix a stale or empty leaderboard
 
 The board is a rollup refreshed every five minutes by `beat`.
@@ -112,6 +162,52 @@ raise `FERMENT_Q10_COLD`; these numbers are a starting point, not measured truth
 
 Changing coefficients does **not** rewrite existing sessions — each stores the
 `vigour_used` and window it was created with, so old predictions stay explicable.
+
+## Moderate content without an admin UI
+
+Phase 10 adds proper tooling. Until then it is `psql`, and these are the
+statements that matter:
+
+```sql
+-- Suspend an account: takes effect on the very next request, and drops them
+-- from leaderboards and public recipe listings on the next rollup.
+UPDATE "user" SET is_suspended = true, suspended_reason = 'spam'
+WHERE email = 'them@example.com';
+
+-- Unpublish a single recipe without deleting the author's copy.
+UPDATE recipe SET is_public = false WHERE id = '<uuid>';
+
+-- Find recently published recipes to review.
+SELECT r.id, r.name, p.handle, r.created_at
+FROM recipe r JOIN user_profile p ON p.user_id = r.owner_id
+WHERE r.is_public AND r.deleted_at IS NULL
+ORDER BY r.created_at DESC LIMIT 20;
+```
+
+Photos are private by default and only reachable through signed URLs, so an
+unpublished recipe's images are not exposed.
+
+## Build and distribute the Android app
+
+```bash
+cd mobile
+flutter build apk --release --dart-define=API_BASE_URL=https://your-host
+```
+
+The base URL is **compiled in** — pointing at a different server is a new build,
+not a setting. The app also refuses cleartext HTTP to anything except
+`10.0.2.2` and `localhost`, so the target must be HTTPS.
+
+`--split-per-abi` cuts the ~49 MB fat APK to roughly a third per architecture if
+you are distributing files directly rather than through a store.
+
+After any API schema change, regenerate the client and let the compiler find the
+drift:
+
+```bash
+python scripts/generate_dart_models.py    # with the stack running
+cd mobile && flutter analyze
+```
 
 ## Inspect the database
 
@@ -257,6 +353,45 @@ them.
 
 Progress shows 100% as soon as the numbers qualify; the award lands on the next
 qualifying event after a photo exists — re-saving the rating is enough.
+
+## Get reminders on your phone
+
+Two routes, and neither needs a Google account.
+
+**The web app** (works on Android and desktop; on iOS it must be installed to
+the home screen first, and needs iOS 16.4+):
+
+> More → Settings → **Enable push** → **Send test**
+
+**The Android app**, via ntfy:
+
+1. Install the ntfy app from F-Droid or Play.
+2. In Sourdough Tracker: More → Push notifications → **Register this device**.
+3. Subscribe the ntfy app to the topic shown there.
+
+The topic is derived from your account id and is effectively unguessable —
+that matters, because in ntfy the topic name *is* the password.
+
+Set quiet hours in Settings to stop routine reminders (feed due, low stock)
+arriving overnight. Time-critical ones — your dough is ready, take it out of the
+fridge — ignore quiet hours, because deferring them would deliver a useless
+message about a loaf that over-proofed hours ago.
+
+## Work offline
+
+Both clients queue writes made without a connection and replay them in order
+when it returns, so a feeding logged in a kitchen with bad wifi is not lost.
+
+You will see "Saved on this device — will sync when you reconnect", then a
+banner showing how many changes are waiting. Pull to refresh (mobile) or tap
+**Sync now** to force it.
+
+Reads fall back to the last cached copy where it makes sense — your starters and
+today's proofs — rather than showing an error.
+
+One deliberate exception: a write the server *rejects* (a duplicate feeding, say)
+is dropped rather than retried forever, because it would never succeed and would
+block everything queued behind it.
 
 ## Find your rank
 

@@ -43,12 +43,12 @@ running against a stale worker is not a state this compose file can reach.
 | Service | Role |
 |---|---|
 | `api` | FastAPI, stateless, horizontally scalable |
-| `worker` | ARQ consumer on `arq:work` — email, leaderboard rollups, future sends |
-| `beat` | ARQ cron on `arq:beat` — decides what is *due* and enqueues it |
+| `worker` | ARQ consumer on `arq:work` — email and leaderboard rollups |
+| `beat` | ARQ cron on `arq:beat` — leaderboard refresh, and draining due reminders |
 | `postgres` | System of record |
 | `redis` | Job queue and rate-limit counters |
 | `minio` | S3-compatible object storage for photos |
-| `ntfy` | Push server (wired up; used from Phase 7) |
+| `ntfy` | Push server for the Android app — no Firebase dependency |
 | `mailhog` | Dev-only SMTP catcher |
 | `caddy` | Prod-only edge: TLS, static PWA, reverse proxy |
 

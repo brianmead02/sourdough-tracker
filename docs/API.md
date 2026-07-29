@@ -8,6 +8,10 @@ was chosen deliberately.
 - Interactive: http://localhost:8000/docs
 - Machine-readable: http://localhost:8000/openapi.json
 
+The Dart client in `mobile/` is generated from that schema
+(`python scripts/generate_dart_models.py`), so a breaking change to a response
+shape stops the Android app compiling rather than failing on a user's phone.
+
 ---
 
 ## Conventions
@@ -19,7 +23,7 @@ was chosen deliberately.
 **confirmed email address** and return `403` until then.
 
 **Timestamps** are ISO-8601, always UTC on the wire. Users have a `timezone` on
-their profile for display and (from Phase 7) quiet hours.
+their profile, used for display and for quiet-hours calculations.
 
 **Status codes.**
 
