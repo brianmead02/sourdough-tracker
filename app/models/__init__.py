@@ -6,6 +6,12 @@ metadata. Later phases append to this list.
 
 from app.models.bake import Bake, BakePhoto, BakeRating, BakeStatus, PhotoKind
 from app.models.base import Base, SoftDeletable, Timestamped, UUIDPrimaryKey
+from app.models.inventory import (
+    InventoryItem,
+    InventoryTransaction,
+    ItemKind,
+    TransactionKind,
+)
 from app.models.proofing import (
     PokeTest,
     ProofCheck,
@@ -40,6 +46,9 @@ __all__ = [
     "EmailVerification",
     "Feeding",
     "IngredientKind",
+    "InventoryItem",
+    "InventoryTransaction",
+    "ItemKind",
     "PasswordReset",
     "PhotoKind",
     "PokeTest",
@@ -56,6 +65,7 @@ __all__ = [
     "StarterObservation",
     "StarterState",
     "Timestamped",
+    "TransactionKind",
     "UUIDPrimaryKey",
     "User",
     "UserProfile",
