@@ -15,6 +15,9 @@ services:
       # Tests are excluded from the image (.dockerignore) but mounted here so
       # `docker compose exec api pytest` runs the working tree.
       - ./tests:/srv/app/tests
+      # Tool config (ruff/mypy/pytest) lives here, so mounting it means a lint
+      # rule change does not need an image rebuild. Dependency changes still do.
+      - ./pyproject.toml:/srv/app/pyproject.toml:ro
     ports:
       - "${API_DEV_PORT:-8000}:8000"
 

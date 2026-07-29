@@ -26,6 +26,7 @@ AmbientTemp = Annotated[float | None, Field(ge=-20, le=60)]
 class ProofSessionCreate(BaseModel):
     stage: ProofStage
     starter_id: uuid.UUID | None = None
+    bake_id: uuid.UUID | None = None
     started_at: datetime | None = None
     dough_temp_c: DoughTemp
     ambient_temp_c: AmbientTemp = None
@@ -72,6 +73,7 @@ class ProofSessionResponse(BaseModel):
 
     id: uuid.UUID
     starter_id: uuid.UUID | None
+    bake_id: uuid.UUID | None
     stage: ProofStage
     status: ProofStatus
     started_at: datetime

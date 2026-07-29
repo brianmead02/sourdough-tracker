@@ -251,7 +251,7 @@ offline queue via Drift, biometric unlock for the stored refresh token.
 | 1 | Identity | ✅ Register/verify/login/refresh/reset, roles, rate limiting, profiles | 2 d |
 | 2 | Starters | ✅ Starters + feedings + observations, schedule, derived streaks | 2 d |
 | 3 | Proofing | ✅ Sessions, checks, fermentation model, live ETA (reminder scheduling lands in Phase 7) | 2–3 d |
-| 4 | Recipes & Bakes | Recipes, baker's %, scaling, fork/star, bakes, ratings, MinIO photos | 3–4 d |
+| 4 | Recipes & Bakes | ✅ Recipes, baker's %, scaling, fork/star, bakes, ratings, MinIO photos | 3–4 d |
 | 5 | Inventory | Items, transaction ledger, bake consumption, per-loaf cost report | 2 d |
 | 6 | Gamification | XP ledger, tiers, achievement registry + ~40 rules, seasons, leaderboards, anti-cheat | 3–4 d |
 | 7 | Notifications | Scheduler table + beat, four notifiers, prefs, quiet hours, digests | 3 d |

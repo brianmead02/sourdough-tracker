@@ -4,7 +4,7 @@ Multi-tenant sourdough service: starter management, live proofing predictions, b
 shareable recipes, flour inventory/costing, and XP + achievements + seasonal leaderboards —
 with reminders over Web Push, email, ntfy and in-app.
 
-Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 3 (proofing) complete.**
+Full design: [docs/PLAN.md](docs/PLAN.md). **Current state: Phase 4 (recipes & bakes) complete.**
 
 ## Quick start
 
@@ -153,3 +153,33 @@ email address. The modelling decisions:
   spread rather than fake precision.
 - `predicted_end_at` is the single field **Phase 7 will schedule the "dough is ready" reminder
   from**, and re-fits update it in place so rescheduling has one thing to watch.
+
+## Recipes, bakes and photos (Phase 4)
+
+`/api/v1/recipes` (CRUD, `/public` browse, `/scale`, `/fork`, `/star`), `/api/v1/bakes`
+(CRUD, `/complete`, `/rating`, `/photos`, `/proof-sessions`) and `/api/v1/media`.
+
+- **Recipes are stored as baker's percentages only; grams are never persisted.** Weight is a
+  function of the batch size the baker picks, so storing it would create a second source of
+  truth that drifts the first time a recipe is scaled. The flour must sum to exactly 100%
+  (±0.5, so `33.3/33.3/33.4` is accepted) — that invariant is what makes every other
+  percentage meaningful.
+- **Both hydrations are reported.** A recipe written at 70% with a 20% levain is really at
+  72.7%, because the levain is flour and water too. `stated_hydration_pct` is what the recipe
+  says; `true_hydration_pct` splits the starter using `starter_hydration_pct` and counts it.
+- **A fork is a copy, not a link.** It starts private at version 1 and remembers its parent;
+  editing the parent afterwards does not touch it. `version` bumps only when the *formula*
+  changes, so a fork can tell whether the original has moved on. Forking your own recipe does
+  not increment `fork_count`.
+- **A bake snapshots the formula it was baked with** rather than referencing the live recipe,
+  and survives the recipe's deletion (`ON DELETE SET NULL`). Editing a recipe must not rewrite
+  what you actually baked last month.
+- **The API never handles image bytes.** Clients get a presigned **POST** (not PUT — only POST
+  supports a `content-length-range` condition, so the 10 MB cap is enforced by storage rather
+  than trusted from the client) and upload straight to MinIO.
+- **Object keys embed the owner id** (`u/{user_id}/{purpose}/{uuid}.ext`) and are checked
+  before attachment, so one user cannot attach another's upload. Attaching also HEADs the
+  object, so a fabricated key for an upload that never happened is rejected. Objects are
+  private; reads go through time-limited signed URLs.
+- `MINIO_PUBLIC_ENDPOINT` must be set in any real deployment — presigned URLs are handed to
+  browsers and phones, which cannot resolve the compose-internal `minio` hostname.
