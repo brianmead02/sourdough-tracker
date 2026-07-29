@@ -12,9 +12,9 @@
 
 ## Where things stand
 
-Phases 0–8 are built and verified. The server is feature-complete and there is
-now an **installable web app** at `/`. What remains is the Flutter Android client
-and hardening.
+Phases 0–9 are built and verified: a feature-complete server, an installable web
+app at `/`, and an Android app that builds to a real APK. Only hardening
+(Phase 10) remains.
 
 | Phase | State |
 |---|---|
@@ -27,7 +27,7 @@ and hardening.
 | 6 · Gamification | ✅ XP ledger, tiers, 44 achievements, seasons, leaderboards |
 | 7 · Notifications | ✅ Scheduler + Web Push / email / ntfy / in-app |
 | 8 · PWA | ✅ Installable web app, offline outbox, Web Push |
-| 9 · Flutter Android | ⬜ |
+| 9 · Flutter Android | ✅ Builds a real APK; analyze + 16 tests green |
 | 10 · Hardening | ⬜ Admin & moderation, backups, data export, load testing |
 
 Open **http://localhost:8000** for the app, or `/docs` for the API.
@@ -40,7 +40,7 @@ Open **http://localhost:8000** for the app, or `/docs` for the API.
 | Database tables | 28 |
 | Migrations | 7 |
 | Achievements | 44 across 19 metrics |
-| Tests | 205 unit + 193 integration (live Postgres, Redis, MinIO, ntfy) + 11 browser-logic |
+| Tests | 205 unit + 193 integration + 11 browser-logic + 16 Dart |
 | Lines of Python | ~15,600 including tests |
 | PWA payload | ~108 KB uncompressed, no build step |
 

@@ -16,10 +16,15 @@ venv/
 .coverage
 htmlcov/
 
-# Flutter (Phase 9)
+# Flutter
 mobile/build/
 mobile/.dart_tool/
 mobile/.flutter-plugins*
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/.pub-cache/
+# Generated from the OpenAPI schema — regenerate, do not hand-edit.
+# (Committed on purpose so a checkout builds without a running server.)
 
 # Vendored web deps are committed on purpose (offline-first, see docs/PLAN.md §2)
 

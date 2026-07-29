@@ -29,6 +29,23 @@ jobs:
       # No build step and no dependencies — the PWA is vendored on purpose.
       - run: node --test web/test/app.test.mjs
 
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.9"
+          channel: stable
+      - run: flutter pub get
+        working-directory: mobile
+      - run: dart format --output=none --set-exit-if-changed lib test
+        working-directory: mobile
+      - run: flutter analyze
+        working-directory: mobile
+      - run: flutter test
+        working-directory: mobile
+
   test:
     runs-on: ubuntu-latest
     services:
