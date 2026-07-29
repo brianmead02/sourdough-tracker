@@ -4,10 +4,12 @@ Running Sourdough Tracker for real: a public, multi-tenant service on the
 internet. If you only want it on your laptop, use
 [QUICKSTART.md](QUICKSTART.md) instead.
 
-> **Status.** The server is feature-complete through Phase 6 except for
-> notifications (Phase 7). There is **no web UI yet** — the PWA is Phase 8, so
-> today a deployment serves an API and its docs. Admin/moderation tooling,
-> automated backups and data export land in Phase 10. Deploy accordingly.
+> **Status.** Phases 0–9 are complete: the server is feature-complete, a
+> deployment serves the installable web app at `/` alongside the API, and an
+> Android APK can be built from `mobile/`. **Not yet built (Phase 10):**
+> admin and moderation tooling, automated backups, data export, and load
+> testing. Deploy accordingly — in particular, moderation of public recipes is
+> currently a `psql` session.
 
 ---
 
@@ -64,6 +66,23 @@ SMTP_PASSWORD=<password>
 SMTP_FROM=Sourdough Tracker <no-reply@sourdough.example.com>
 ```
 
+**Web Push** needs a VAPID keypair. Without one the channel is cleanly absent —
+the API reports `available: false` and refuses subscriptions rather than
+accepting ones it can never deliver to:
+
+```bash
+docker compose run --rm api sdt vapid-keys   # prints the three lines to paste
+```
+
+```bash
+VAPID_PUBLIC_KEY=<generated>
+VAPID_PRIVATE_KEY=<generated — a secret>
+VAPID_SUBJECT=mailto:admin@sourdough.example.com
+```
+
+Every other setting has a working default. `.env.example` documents all 53 of
+them, with the tuning knobs commented out.
+
 **Sanity-check the secret handling before going further:**
 
 ```bash
@@ -84,6 +103,9 @@ docker compose exec api sdt seed-achievements
 docker compose exec api sdt check          # verifies Postgres + Redis
 ```
 
+`seed-achievements` is not optional: the achievement table is a projection of
+the code catalogue, and without it every badge lookup fails a foreign key.
+
 Create the first administrator:
 
 ```bash
@@ -103,13 +125,46 @@ curl https://sourdough.example.com/api/v1/health
 
 ## 4. What the prod profile changes
 
-- Adds **Caddy** on 80/443: automatic TLS via Let's Encrypt, serves the PWA,
-  reverse-proxies `/api/*`, sets `X-Content-Type-Options`, `X-Frame-Options` and
-  `Referrer-Policy`.
+- Adds **Caddy** on 80/443: automatic TLS via Let's Encrypt, serves the PWA from
+  `web/`, reverse-proxies `/api/*`, sets `X-Content-Type-Options`,
+  `X-Frame-Options` and `Referrer-Policy`.
 - **Does not publish** the Postgres, Redis or MinIO ports. Only Caddy is exposed.
 - Drops Mailhog.
 
 Everything else talks over the compose network.
+
+### Serving the web app
+
+In production Caddy serves `web/` directly and requests never reach the API. In
+development the API mounts the same directory itself, so `docker compose up`
+gives a working app rather than only an API — the mount is registered after the
+routers, so it cannot shadow `/api` or `/docs`.
+
+One thing to get right on a deploy: **`sw.js` must not be cached**. The API
+serves it with `Cache-Control: no-cache`, and Caddy should do the same. A
+service worker cached by a CDN is how a PWA gets permanently stuck on an old
+release. Bump `VERSION` in `web/sw.js` on each deploy so the shell cache
+invalidates.
+
+### The Android app
+
+`mobile/` is not deployed by this stack; it is built and distributed separately:
+
+```bash
+cd mobile
+flutter build apk --release --dart-define=API_BASE_URL=https://sourdough.example.com
+```
+
+Two things that will bite:
+
+* The **API base URL is compiled in**. A build pointing at the wrong host is a
+  new build, not a setting.
+* The app only permits cleartext HTTP to `10.0.2.2` and `localhost`. A real
+  deployment must be **HTTPS**, or the app cannot talk to it at all.
+
+The release APK is ~49 MB because it is a fat APK covering every ABI. Use
+`flutter build apk --split-per-abi` to cut that roughly in three if you are
+distributing the files directly.
 
 ### Exposing MinIO
 
@@ -140,7 +195,7 @@ docker compose --profile prod up -d --scale api=4
 |---|---|
 | `api` | Stateless. Scale freely. |
 | `worker` | Scale freely; jobs are claimed from one queue. |
-| `beat` | **Keep at 1 by preference.** Multiple replicas are safe (arq keys cron runs by timestamp) but there is no benefit. |
+| `beat` | **Keep at 1 by preference.** Multiple replicas are safe — arq keys cron runs by timestamp, and the notification drain claims rows `FOR UPDATE SKIP LOCKED` — but there is no benefit. |
 | `postgres` | Vertical first. It is the only stateful component that matters. |
 | `redis` | Rarely the bottleneck; it holds a queue and rate-limit counters. |
 | `minio` | Swap for real S3/R2 by pointing `MINIO_*` at them — the storage layer is S3 API only. |
@@ -196,11 +251,18 @@ docker compose exec api sdt db current
 
 **Scheduled jobs**, all run by `beat`:
 
-| Job | Cadence |
-|---|---|
-| `refresh_leaderboard` | every 5 min |
-| `drain_due_notifications` | every 60 s (no-op until Phase 7) |
-| `enqueue_heartbeat` | every 15 min |
+| Job | Cadence | What it does |
+|---|---|---|
+| `drain_due_notifications` | every 60 s | Claims due reminders and delivers them to each channel |
+| `refresh_leaderboard` | every 5 min | Rebuilds the rollup every board reads from |
+| `enqueue_heartbeat` | every 15 min | Proves the beat → Redis → worker path is alive |
+
+If reminders stop arriving, this is the first place to look:
+
+```bash
+docker compose logs beat --since 10m | grep drain
+docker compose exec -T postgres psql -U sourdough -d sourdough -c "SELECT status, count(*) FROM scheduled_notification GROUP BY 1;"
+```
 
 **Upgrading:**
 

@@ -28,7 +28,7 @@ app at `/`, and an Android app that builds to a real APK. Only hardening
 | 7 · Notifications | ✅ Scheduler + Web Push / email / ntfy / in-app |
 | 8 · PWA | ✅ Installable web app, offline outbox, Web Push |
 | 9 · Flutter Android | ✅ Builds a real APK; analyze + 16 tests green |
-| 10 · Hardening | ⬜ Admin & moderation, backups, data export, load testing |
+| 10 · Hardening | ⬜ Admin & moderation UI, automated backups, data export, load testing, per-test DB isolation |
 
 Open **http://localhost:8000** for the app, or `/docs` for the API.
 
@@ -43,6 +43,17 @@ Open **http://localhost:8000** for the app, or `/docs` for the API.
 | Tests | 205 unit + 193 integration + 11 browser-logic + 16 Dart |
 | Lines of Python | ~15,600 including tests |
 | PWA payload | ~108 KB uncompressed, no build step |
+
+## Verification
+
+Nothing in these documents is asserted from memory. Endpoint and table counts
+come from the running service; the Quickstart's numbers are produced by a script
+that walks it end to end; the Android app is confirmed by `flutter analyze`, its
+tests, and a real APK build.
+
+What is **not** verified, and is flagged where it matters: the visual rendering
+of either client, the PWA install prompt, and a push notification arriving on a
+physical device.
 
 ## The five ideas worth knowing
 

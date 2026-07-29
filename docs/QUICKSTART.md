@@ -17,6 +17,9 @@ docker compose exec api alembic upgrade head
 docker compose exec api sdt seed-achievements
 ```
 
+`seed-achievements` is required, not optional — the achievement table is a
+projection of the code catalogue, and badges cannot be awarded without it.
+
 Check it came up:
 
 ```bash
@@ -30,6 +33,7 @@ curl localhost:8000/api/v1/health
 
 | What | Where |
 |---|---|
+| **The web app** | **http://localhost:8000** |
 | API docs (Swagger) | http://localhost:8000/docs |
 | Mailhog — catches all outbound email | http://localhost:8025 |
 | MinIO console (`minioadmin` / `minioadmin`) | http://localhost:9001 |
@@ -39,8 +43,13 @@ curl localhost:8000/api/v1/health
 
 ## 2. Create an account
 
-There is no web UI yet — the PWA is Phase 8. Everything below works from
-http://localhost:8000/docs, or from curl.
+**The fastest route is the app itself:** open http://localhost:8000, register,
+then fetch the confirmation token from Mailhog (below) and paste it into the
+Confirm tab. Everything after that is point-and-click.
+
+The rest of this guide uses curl, because seeing the requests is the quickest
+way to understand the API — and it is what you would automate against. All of it
+also works from Swagger at http://localhost:8000/docs.
 
 ```bash
 curl -X POST localhost:8000/api/v1/auth/register \
@@ -224,6 +233,55 @@ curl -X POST "$UPLOAD_URL" $(echo "$FIELDS" | jq -r 'to_entries|map("-F \(.key)=
 curl -X POST localhost:8000/api/v1/bakes/$BAKE/photos -H "$AUTH" \
   -H 'content-type: application/json' \
   -d '{"object_key":"'$KEY'","kind":"crumb","caption":"open crumb"}'
+```
+
+---
+
+## 8. Turn on reminders
+
+Reminders are queued in a table and delivered by the beat worker every minute.
+Web Push needs a keypair; without one the channel reports itself unavailable
+rather than failing silently:
+
+```bash
+docker compose exec api sdt vapid-keys     # paste the three lines into .env
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+Then in the web app: **More → Settings → Enable push**, and **Send test** to
+prove the round trip. Or from curl:
+
+```bash
+curl -X POST localhost:8000/api/v1/notifications/test -H "$AUTH"   -H 'content-type: application/json' -d '{}'
+# wait up to 60s for the beat tick, then:
+curl localhost:8000/api/v1/notifications/inbox -H "$AUTH"
+```
+
+Starting a proof queues a "dough is ready" reminder automatically, and every
+check-in **moves** that reminder rather than adding another. Quiet hours defer
+routine reminders like feed-due, but never time-critical ones — dough that is
+ready at 3am is ready at 3am.
+
+---
+
+## 9. Run the Android app
+
+Needs Flutter 3.41+ and an Android device or emulator.
+
+```bash
+cd mobile
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+```
+
+`10.0.2.2` is the host machine as seen from the Android emulator — `localhost`
+there means the emulator itself, which is the most common way to lose an hour.
+
+The Dart API client is generated from the running service's schema, so it cannot
+drift from the API:
+
+```bash
+python scripts/generate_dart_models.py     # needs the stack running
 ```
 
 ---

@@ -35,23 +35,41 @@ uvicorn app.main:app --reload
 
 ## The loop
 
+**Backend** — all four must pass before a change is done:
+
 ```bash
 docker compose exec api ruff format app tests
 docker compose exec api ruff check . --fix
 docker compose exec api mypy app
 docker compose exec api pytest -q                 # unit only, ~1s
-docker compose exec api pytest -q -m integration  # needs the live stack, ~18s
+docker compose exec api pytest -q -m integration  # needs the live stack, ~23s
 ```
 
-All four must pass before a change is done. CI runs exactly these plus a Docker
-build.
+**Web app** — no build step, no `node_modules`; node is only for the tests:
+
+```bash
+node --test web/test/app.test.mjs                 # 11 tests, browser globals stubbed
+```
+
+**Android app** — needs Flutter 3.41+:
+
+```bash
+cd mobile
+dart format lib test
+flutter analyze
+flutter test                                      # 16 tests
+```
+
+CI runs all of these, plus a Docker build.
 
 ### Test layers
 
-| | Count | Speed | Touches |
+| Layer | Count | Speed | Touches |
 |---|---|---|---|
-| Unit | 152 | <1 s | Nothing — pure functions |
-| Integration | 159 | ~18 s | Postgres, Redis, MinIO |
+| Python unit | 205 | ~1 s | Nothing — pure functions and static assets |
+| Python integration | 193 | ~23 s | Postgres, Redis, MinIO, ntfy |
+| Browser logic | 11 | <1 s | node, with browser globals stubbed |
+| Dart | 16 | ~2 s | `flutter test` |
 
 Integration tests are marked and **deselected by default** (`addopts = -m 'not
 integration'`). They are not mocked: email really lands in Mailhog, uploads
@@ -73,12 +91,16 @@ transaction boundaries.
 ## Layout
 
 ```
-app/
+app/           FastAPI service
   api/v1/      HTTP only — auth, validation, status codes
   schemas/     Pydantic contracts
   services/    Business logic; pure functions wherever the maths allows
   models/      SQLAlchemy tables
   worker/      Background tasks and the beat schedule
+web/           The PWA — no build step, Alpine vendored in web/vendor/
+mobile/        Flutter Android app; lib/api/models.dart is generated
+scripts/       generate_dart_models.py — Dart models from the OpenAPI schema
+tests/         Python tests (integration ones are marked)
 ```
 
 The rule: **if it is arithmetic rather than I/O, it belongs in `services/` as a
@@ -170,6 +192,48 @@ counter.
 4. **Add it to `app/services/replay.py:_timeline`**, or `sdt recompute-xp` will
    silently under-award it. This is the easiest step to forget.
 
+### Changing the web app
+
+Edit files in `web/` and reload — `docker-compose.dev.yml` mounts the directory
+into the API, which serves it. Things to keep true:
+
+* **Nothing from a CDN.** Vendor it into `web/vendor/` instead; a test asserts
+  the shell contains no external URLs.
+* **Add new files to the `SHELL` precache list in `sw.js`.** A precache entry
+  that 404s makes `install` reject and the service worker never activates —
+  `tests/test_pwa_assets.py` checks every entry resolves.
+* **Bump `VERSION` in `sw.js`** when shell assets change, or clients keep the
+  old cache.
+* Alpine fails *silently* on a missing handler, so the same test file asserts
+  every `@click`, `x-text` and `x-model` binding resolves to something that
+  exists on the component.
+
+### Changing the Android app
+
+```bash
+cd mobile && flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+```
+
+`lib/api/models.dart` is **generated** — never hand-edit it. After changing any
+response schema:
+
+```bash
+python scripts/generate_dart_models.py     # with the stack running
+cd mobile && flutter analyze
+```
+
+That is the drift check: if the API changed shape incompatibly, the app stops
+compiling rather than failing at runtime on a user's phone.
+
+Android specifics worth knowing before debugging for an hour:
+
+* `10.0.2.2` is the host from inside the emulator; `localhost` is the emulator.
+* Cleartext HTTP is permitted **only** for `10.0.2.2` and `localhost`
+  (`android/app/src/main/res/xml/network_security_config.xml`). Anything else
+  must be HTTPS.
+* `INTERNET` lives in the **main** manifest. `flutter create` only puts it in
+  the debug one, which makes release builds silently unable to reach anything.
+
 ### Recomputing the XP ledger
 
 ```bash
@@ -206,7 +270,13 @@ name is freed but the history survives.
 **Timestamps are UTC** on the wire and in the database. `fed_at`-style fields are
 bounded: no future beyond 5 minutes of skew, no more than 30 days back.
 
-**Line length 100.** ruff formats; do not hand-wrap.
+**Line length 100** in Python; ruff formats, do not hand-wrap. Dart uses
+`dart format` defaults (80).
+
+**The two clients must behave the same on a bad network.** The web outbox
+(`web/js/db.js`) and the Dart one (`mobile/lib/api/outbox.dart`) implement the
+same drain policy — keep on network/5xx/401, drop on any other 4xx — and both
+have tests for both directions. If you change one, change the other.
 
 ---
 
@@ -238,3 +308,38 @@ anything creating its own session must do the same.
 **Emails not arriving in dev** — they are sent by the worker, not the API. Check
 `docker compose logs worker`, and confirm the worker is running the same image
 as the API.
+
+**Reminders not arriving** — they are queued in `scheduled_notification` and
+delivered by the beat tick every 60 seconds, so nothing is instant. Look at the
+queue first:
+
+```bash
+docker compose exec -T postgres psql -U sourdough -d sourdough -c "SELECT event, status, due_at, attempts, last_error FROM scheduled_notification ORDER BY created_at DESC LIMIT 10;"
+docker compose logs beat --since 10m | grep drain
+```
+
+To drain by hand instead of waiting for the tick, pipe a script into the
+container rather than fighting nested quoting:
+
+```bash
+docker compose exec -T api python - <<'PY'
+import asyncio
+from app.db import get_session_factory
+from app.services.notifications import drain
+
+async def go():
+    async with get_session_factory()() as session:
+        print(await drain(session))
+        await session.commit()
+
+asyncio.run(go())
+PY
+```
+
+[HOWTO.md](HOWTO.md) explains what each status means.
+
+**A dependency change did nothing** — `pyproject.toml` is mounted, but installed
+packages come from the image. Rebuild *and recreate*:
+`docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`.
+Building without recreating leaves the old containers running, which has caused
+two separate bugs in this project.

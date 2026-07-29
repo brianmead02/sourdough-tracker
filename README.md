@@ -6,8 +6,10 @@ achievements and seasonal leaderboards across the whole service.
 
 Built as a `docker-compose` stack around a FastAPI backend.
 
-**Status: phases 0–8 complete.** The server is feature-complete and ships with an
-installable web app. What remains is the Flutter Android client and hardening.
+**Status: phases 0–9 complete.** A feature-complete server, an installable web
+app served at `/`, and an Android app that builds to a real APK. What remains is
+Phase 10 — admin and moderation tooling, automated backups, data export and load
+testing.
 
 ---
 
@@ -70,8 +72,9 @@ Production, including the settings that must change:
   completing a bake tells you what the loaf actually cost.
 - **Gamification** — 44 achievements, XP, six leaderboard categories and
   quarterly seasons, with anti-cheat that assumes the internet is watching.
-- **The app** — an installable PWA with live proof countdowns, one-tap feeding, and
-  an offline outbox so a bad kitchen wifi never loses a feeding.
+- **Two clients** — an installable PWA and an Android app, both with live proof
+  countdowns, one-tap feeding, and an offline outbox so bad kitchen wifi never
+  loses a feeding.
 - **Reminders** — a scheduled-notification table drained every minute, delivering
   to Web Push, email, ntfy and an in-app inbox. Checking on a proof *moves* its
   reminder rather than queueing another; quiet hours defer housekeeping but never
@@ -79,8 +82,13 @@ Production, including the settings that must change:
 
 ## Stack
 
-Python 3.12 · FastAPI · SQLAlchemy 2.0 (async) · PostgreSQL 16 · Redis · ARQ ·
-MinIO · Alembic · Caddy
+**Server** — Python 3.12 · FastAPI · SQLAlchemy 2.0 (async) · PostgreSQL 16 ·
+Redis · ARQ · MinIO · Alembic · Caddy · ntfy
+
+**Web** — Alpine.js, vendored. No build step, no `node_modules`, ~108 KB.
+
+**Android** — Flutter 3.41, with the API client generated from the OpenAPI
+schema so it cannot drift.
 
 `api`, `worker` and `beat` are the same image with different commands — only
 `api` declares the build, so they cannot drift apart.
@@ -103,11 +111,13 @@ sdt db upgrade | downgrade | revision | current
 docker compose exec api pytest -q                 # 205 unit, no I/O, ~1s
 docker compose exec api pytest -q -m integration  # 193 against live services
 docker compose exec api sh -c "ruff check . && ruff format --check . && mypy app"
-node --test web/test/app.test.mjs                  # 11 browser-logic tests
+node --test web/test/app.test.mjs                 # 11 browser-logic tests
+cd mobile && flutter analyze && flutter test      # 16 Dart tests
 ```
 
 Integration tests are not mocked: email really lands in Mailhog, uploads really
-go to MinIO and are read back byte-for-byte.
+go to MinIO and are read back byte-for-byte. The Android app is verified by
+`flutter analyze`, its tests, and building an actual APK.
 
 ---
 
