@@ -378,6 +378,56 @@ dangling handler fails silently in a browser.
 
 ---
 
+## 7b. The Android app
+
+`mobile/` — Flutter 3.41, targeting Android only. Verified by `flutter analyze`
+(clean), 16 Dart tests, and building both a debug and a release APK.
+
+**The API client is generated from the OpenAPI schema.**
+`scripts/generate_dart_models.py` walks `components.schemas` and emits 84
+immutable Dart classes. The plan named openapi-generator; that would emit tens
+of thousands of lines of Dio-flavoured code for a schema this size, and a
+generator nobody reads is where bugs hide. This one is ~180 lines of Python and
+its output is reviewable. Regenerate with:
+
+    python scripts/generate_dart_models.py
+
+**Two deliberate departures from the plan:**
+
+* **`ChangeNotifier` instead of Riverpod.** One store, no cross-provider
+  dependencies — a state-management package would be ceremony, and one fewer
+  dependency is one fewer thing that fails to resolve on a fresh checkout.
+* **A JSON file instead of Drift for the outbox.** The queue is short-lived and
+  usually empty; a schema-migrating database for a list of pending POSTs costs
+  more than it earns.
+
+**The outbox mirrors the web client's drain policy exactly** — network error,
+5xx or 401 keeps everything; any other 4xx drops that entry and continues. Both
+clients behaving identically on a bad network is worth more than either being
+individually clever. Dart tests cover both directions, plus surviving a restart
+and a corrupt queue file.
+
+**Push arrives via ntfy, not Firebase.** The app registers a per-account topic
+(derived from the user id, because ntfy's security model is that the topic name
+*is* the password) and the user subscribes the ntfy app to it. Nothing routes
+through Google, so this works on a de-Googled phone.
+
+Two Android specifics that only fail at runtime, and are easy to miss:
+
+* **`INTERNET` is declared in the *main* manifest.** `flutter create` puts it
+  only in the debug and profile manifests, so a release APK can make no network
+  calls at all — and nothing warns you.
+* **A network security config permits cleartext for `10.0.2.2` and `localhost`
+  only.** Android blocks plain HTTP from API 28, which is right; blanket-enabling
+  it would send bearer tokens over any network the phone is on. `10.0.2.2` is the
+  host as seen from the emulator — `localhost` there is the emulator itself.
+
+The API base URL is a build-time constant:
+
+    flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+
+---
+
 ## 8. The fermentation model
 
 The feature that makes this more than a diary. See
@@ -420,6 +470,7 @@ eta  = target_rise_fraction / rate
 | Unit | 205 | Nothing — pure functions and static assets |
 | Integration | 193 | Live Postgres, Redis, MinIO and ntfy |
 | Browser logic | 11 | node, with browser globals stubbed |
+| Dart | 16 | `flutter test`, plus `flutter analyze` and a real APK build |
 
 Integration tests are marked and deselected by default (`pytest -m integration`
 to run them). They exercise the real stack: real SMTP delivery into Mailhog, real
@@ -437,6 +488,8 @@ this reason. Per-test isolation is on the Phase 10 list.
 
 | Plan said | Built | Why |
 |---|---|---|
+| openapi-generator for the Dart client | A ~180-line generator | Same guarantee, output small enough to review |
+| Riverpod + Drift in the Flutter app | `ChangeNotifier` + a JSON outbox | One store and a usually-empty queue do not need either |
 | Tailwind browser build | Hand-written CSS | Tailwind's CDN build is a ~400 KB runtime compiler; the shell is 10 KB of CSS instead |
 | `notification_preference` table | JSONB map on `notification_settings` | Adding a reminder type needs no migration, and an unset event falls back to its default |
 | Single Q10 for fermentation | Piecewise warm/cold Q10 | A flat Q10 under-predicts retard by ~3× |
@@ -449,6 +502,5 @@ this reason. Per-test isolation is on the Phase 10 list.
 
 ## 11. What is not built yet
 
-- **Phase 9 — Flutter Android client.**
 - **Phase 10 — Admin/moderation UI, backups, data export, load testing,
   per-test database isolation.**
