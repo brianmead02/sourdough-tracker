@@ -84,6 +84,18 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "sourdough-media"
     minio_secure: bool = False
+    # Presigned URLs are handed to browsers and phones, which cannot resolve the
+    # compose-internal hostname. Set this to the address clients can reach.
+    minio_public_endpoint: str = ""
+    minio_region: str = "us-east-1"
+
+    # --- media uploads -------------------------------------------------------
+    upload_url_ttl_seconds: int = 900
+    download_url_ttl_seconds: int = 3600
+    max_upload_bytes: int = 10 * 1024 * 1024
+    allowed_image_types: list[str] = Field(
+        default_factory=lambda: ["image/jpeg", "image/png", "image/webp"]
+    )
 
     # --- smtp ----------------------------------------------------------------
     smtp_host: str = "mailhog"
@@ -107,6 +119,18 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.environment == "dev"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def minio_internal_url(self) -> str:
+        scheme = "https" if self.minio_secure else "http"
+        return f"{scheme}://{self.minio_endpoint}"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def minio_client_url(self) -> str:
+        """Endpoint baked into presigned URLs. Falls back to the internal one."""
+        return self.minio_public_endpoint or self.minio_internal_url
 
     @model_validator(mode="after")
     def _reject_insecure_secrets(self) -> "Settings":

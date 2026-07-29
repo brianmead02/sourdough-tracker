@@ -74,7 +74,10 @@ class ProofSession(Base, UUIDPrimaryKey, Timestamped):
     starter_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("starter.id", ondelete="SET NULL")
     )
-    # bake_id is added in Phase 4, once there is a bake table to point at.
+    # A proof may belong to a bake; a levain build or a test proof need not.
+    bake_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("bake.id", ondelete="CASCADE"), index=True
+    )
 
     stage: Mapped[ProofStage] = mapped_column(
         _enum_column(ProofStage, "proof_stage"), nullable=False

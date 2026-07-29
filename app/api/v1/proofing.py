@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, VerifiedUser
 from app.db import get_session
+from app.models.bake import Bake
 from app.models.proofing import ProofCheck, ProofSession, ProofStatus
 from app.models.starter import Starter
 from app.schemas.proofing import (
@@ -119,6 +120,17 @@ async def start_session(
         )
         if owned.first() is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Starter not found")
+
+    if payload.bake_id is not None:
+        owned_bake = await db.execute(
+            select(Bake.id).where(
+                Bake.id == payload.bake_id,
+                Bake.user_id == user.id,
+                Bake.deleted_at.is_(None),
+            )
+        )
+        if owned_bake.first() is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bake not found")
 
     coeffs = fermentation.coefficients()
     vigour = await proof_service.estimate_starter_vigour(db, payload.starter_id, coeffs)
