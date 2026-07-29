@@ -12,8 +12,9 @@
 
 ## Where things stand
 
-Phases 0–6 are built and verified. The server is feature-complete **except for
-notifications**, and there is **no user interface yet**.
+Phases 0–7 are built and verified. **The server is feature-complete.** What
+remains is clients (PWA, Flutter) and hardening — there is still **no user
+interface**.
 
 | Phase | State |
 |---|---|
@@ -24,7 +25,7 @@ notifications**, and there is **no user interface yet**.
 | 4 · Recipes & bakes | ✅ Baker's percentages, scaling, fork/star, ratings, photos |
 | 5 · Inventory | ✅ Transaction ledger, bake consumption, per-loaf costing |
 | 6 · Gamification | ✅ XP ledger, tiers, 44 achievements, seasons, leaderboards |
-| 7 · Notifications | ⬜ Scheduler + Web Push / email / ntfy / in-app |
+| 7 · Notifications | ✅ Scheduler + Web Push / email / ntfy / in-app |
 | 8 · PWA | ⬜ The web interface |
 | 9 · Flutter Android | ⬜ |
 | 10 · Hardening | ⬜ Admin & moderation, backups, data export, load testing |
@@ -36,12 +37,12 @@ notifications**, and there is **no user interface yet**.
 
 | | |
 |---|---|
-| Endpoints | 75 |
-| Database tables | 23 |
-| Migrations | 6 |
+| Endpoints | 88 |
+| Database tables | 28 |
+| Migrations | 7 |
 | Achievements | 44 across 19 metrics |
-| Tests | 152 unit (no I/O) + 159 integration (live Postgres, Redis, MinIO) |
-| Lines of Python | ~12,600 including tests |
+| Tests | 192 unit (no I/O) + 191 integration (live Postgres, Redis, MinIO, ntfy) |
+| Lines of Python | ~15,300 including tests |
 
 ## The five ideas worth knowing
 

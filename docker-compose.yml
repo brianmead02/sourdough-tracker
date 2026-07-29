@@ -117,7 +117,11 @@ services:
       NTFY_BASE_URL: ${NTFY_PUBLIC_URL:-http://localhost:8080}
       NTFY_BEHIND_PROXY: "true"
       NTFY_AUTH_FILE: /var/lib/ntfy/auth.db
-      NTFY_AUTH_DEFAULT_ACCESS: deny-all
+      # ntfy's own security model is "the topic name is the password" — topics
+      # here are random and never guessable. `deny-all` looks safer but makes
+      # the channel unusable without provisioning a token per user, which is a
+      # Phase 10 concern; the API already supports sending one.
+      NTFY_AUTH_DEFAULT_ACCESS: ${NTFY_DEFAULT_ACCESS:-read-write}
       NTFY_CACHE_FILE: /var/lib/ntfy/cache.db
     volumes:
       - ntfy_data:/var/lib/ntfy

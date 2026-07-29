@@ -205,4 +205,43 @@ async def consume_for_bake(db: AsyncSession, bake: Bake) -> ConsumptionResult:
         result.skipped_reason = "no inventory items matched this bake's flour blend"
 
     await db.flush()
+    await _warn_if_low(
+        db,
+        bake.user_id,
+        [by_name[n.strip().lower()] for n in wanted if n.strip().lower() in by_name],
+    )
     return result
+
+
+async def _warn_if_low(db: AsyncSession, user_id: uuid.UUID, touched: list[InventoryItem]) -> None:
+    """Queue a low-stock reminder for anything this bake pushed under its threshold.
+
+    Keyed per item, so repeatedly baking against low stock nags once rather than
+    once per bake — until the item is restocked and drops below again.
+    """
+    if not touched:
+        return
+
+    from app.models.notification import NotificationEvent
+    from app.services.notifications import cancel_prefix, schedule
+
+    stock = await item_stock(db, [item.id for item in touched])
+    for item in touched:
+        state = stock[item.id]
+        key = f"inventory:{item.id}:low"
+        if state.is_low:
+            await schedule(
+                db,
+                user_id=user_id,
+                event=NotificationEvent.inventory_low,
+                due_at=datetime.now(UTC),
+                dedupe_key=key,
+                payload={
+                    "item_name": item.name,
+                    "on_hand_g": round(state.on_hand_g),
+                    "item_id": str(item.id),
+                },
+            )
+        else:
+            # Back above the line: withdraw any warning that has not gone out.
+            await cancel_prefix(db, key)
