@@ -26,6 +26,15 @@ globalThis.window = { addEventListener() {} };
 globalThis.location = { hash: '#/dashboard', search: '' };
 globalThis.setInterval = () => 0;
 
+const attributes = new Map();
+globalThis.document = {
+  documentElement: {
+    setAttribute: (k, v) => attributes.set(k, v),
+    removeAttribute: (k) => attributes.delete(k),
+    getAttribute: (k) => attributes.get(k) ?? null,
+  },
+};
+
 let nextId = 0;
 let rows = new Map();
 const request = (result) => {
@@ -62,7 +71,7 @@ Object.defineProperty(globalThis, 'indexedDB', {
   },
 });
 
-const { app } = await import('../js/app.js');
+const { app, applyTheme, NAVIGABLE, PRIMARY, ROUTES, SECONDARY, TITLES } = await import('../js/app.js');
 const { queueWrite, drainQueue, pendingCount, clearQueue } = await import('../js/db.js');
 
 const reset = async () => { await clearQueue(); nextId = 0; };
@@ -166,3 +175,86 @@ for (const [label, status] of [['offline', 0], ['server error', 503], ['expired 
     assert.equal(await pendingCount(), 2, 'nothing may be lost');
   });
 }
+
+// --- navigation coverage ---------------------------------------------------
+//
+// Nine routes existed, the nav had six buttons, and nothing linked the other
+// three: inventory, achievements and leaderboard shipped reachable only by
+// typing the hash. These tests exist so that cannot recur silently.
+
+test('every route is reachable from the navigation', () => {
+  const missing = ROUTES.filter((route) => !NAVIGABLE.includes(route));
+  assert.deepEqual(
+    missing, [],
+    `unreachable route(s): ${missing.join(', ')} — add each to PRIMARY or SECONDARY in app.js`,
+  );
+});
+
+test('the navigation offers nothing that is not a route', () => {
+  const bogus = NAVIGABLE.filter((route) => !ROUTES.includes(route));
+  assert.deepEqual(bogus, [], `navigation points at non-route(s): ${bogus.join(', ')}`);
+});
+
+test('no destination appears in both the tab bar and the sheet', () => {
+  const overlap = PRIMARY.filter((d) => SECONDARY.some((s) => s.route === d.route));
+  assert.deepEqual(overlap.map((d) => d.route), []);
+});
+
+test('the tab bar holds five destinations, leaving the sixth slot for More', () => {
+  assert.equal(PRIMARY.length, 5);
+});
+
+test('every destination has a title, and sheet entries explain themselves', () => {
+  for (const d of [...PRIMARY, ...SECONDARY]) {
+    assert.ok(TITLES[d.route], `${d.route} has no title`);
+    assert.ok(d.icon, `${d.route} has no icon`);
+  }
+  for (const d of SECONDARY) {
+    assert.ok(d.hint && d.hint.length > 8, `${d.route} needs a hint for the More sheet`);
+  }
+});
+
+test('opening a destination closes the More sheet', () => {
+  const a = app();
+  a.moreOpen = true;
+  a.go('inventory', false);
+  assert.equal(a.view, 'inventory');
+  assert.equal(a.moreOpen, false);
+});
+
+// --- theme ----------------------------------------------------------------
+
+test('theme cycles auto to light to dark and back, and persists', () => {
+  const a = app();
+  assert.equal(a.theme, 'auto', 'defaults to following the device');
+
+  a.cycleTheme();
+  assert.equal(a.theme, 'light');
+  assert.equal(document.documentElement.getAttribute('data-theme'), 'light');
+  assert.equal(localStorage.getItem('sd-theme'), 'light');
+
+  a.cycleTheme();
+  assert.equal(a.theme, 'dark');
+  assert.equal(document.documentElement.getAttribute('data-theme'), 'dark');
+
+  a.cycleTheme();
+  assert.equal(a.theme, 'auto');
+  assert.equal(document.documentElement.getAttribute('data-theme'), null,
+    'auto must remove the attribute so prefers-color-scheme takes over again');
+});
+
+test('a stored theme is restored on the next visit', () => {
+  localStorage.setItem('sd-theme', 'dark');
+  assert.equal(app().theme, 'dark');
+  localStorage.setItem('sd-theme', 'not-a-theme');
+  assert.equal(app().theme, 'auto', 'a junk value must not break startup');
+  localStorage.removeItem('sd-theme');
+});
+
+test('applyTheme is idempotent and reversible', () => {
+  applyTheme('dark');
+  applyTheme('dark');
+  assert.equal(document.documentElement.getAttribute('data-theme'), 'dark');
+  applyTheme('auto');
+  assert.equal(document.documentElement.getAttribute('data-theme'), null);
+});

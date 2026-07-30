@@ -1,6 +1,7 @@
 """FastAPI application factory."""
 
 import logging
+import mimetypes
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -73,6 +74,12 @@ def _mount_pwa(app: FastAPI) -> None:
     if not (web_root / "index.html").exists():
         logger.info("no web/ directory found; serving API only")
         return
+
+    # StaticFiles guesses content types via the stdlib `mimetypes`, which has no
+    # entry for .woff2 on several platforms — the vendored font then goes out as
+    # application/octet-stream. Browsers sniff it and render anyway, but it logs a
+    # preload type mismatch and stops intermediaries treating it as a font.
+    mimetypes.add_type("font/woff2", ".woff2")
 
     @app.get("/sw.js", include_in_schema=False)
     async def service_worker() -> FileResponse:
