@@ -27,7 +27,7 @@ for other people.
 | 5 · Inventory | ✅ Transaction ledger, bake consumption, per-loaf costing |
 | 6 · Gamification | ✅ XP ledger, tiers, 44 achievements, seasons, leaderboards |
 | 7 · Notifications | ✅ Scheduler + Web Push / email / ntfy / in-app |
-| 8 · PWA | ✅ Installable web app, offline outbox, Web Push |
+| 8 · PWA | ✅ Installable web app, offline outbox, Web Push; redesigned (see [WEB-REDESIGN-PLAN.md](WEB-REDESIGN-PLAN.md)) |
 | 9 · Flutter Android | ✅ Builds a real APK; analyze + 16 tests green |
 | 10 · Hardening | ✅ Admin & moderation API, backup script, export + erasure, load test, per-test DB isolation |
 
@@ -41,7 +41,7 @@ Open **http://localhost:8000** for the app, or `/docs` for the API.
 | Database tables | 28 |
 | Migrations | 7 |
 | Achievements | 44 across 19 metrics |
-| Tests | 205 unit + 217 integration + 11 browser-logic + 16 Dart |
+| Tests | 205 unit + 217 integration + 20 browser-logic + 16 Dart |
 | Lines of Python | ~15,600 including tests |
 | PWA payload | ~108 KB uncompressed, no build step |
 

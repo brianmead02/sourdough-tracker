@@ -151,36 +151,12 @@ def seed_achievements() -> None:
     """Project the code catalogue into the achievement table."""
 
     async def _seed() -> None:
-        from sqlalchemy.dialects.postgresql import insert
-
         from app.db import dispose_engine, get_session_factory
-        from app.models.gamification import Achievement
-        from app.services.achievements import ACHIEVEMENTS
+        from app.services.achievements import seed_catalogue
 
         async with get_session_factory()() as session:
-            for definition in ACHIEVEMENTS:
-                values = {
-                    "code": definition.code,
-                    "name": definition.name,
-                    "description": definition.description,
-                    "category": definition.category,
-                    "rarity": definition.rarity,
-                    "xp_award": definition.xp_award,
-                    "icon": definition.icon,
-                    "target": definition.target,
-                    "criteria": {"metric": definition.metric.value, **definition.criteria},
-                    "requires_photo": definition.requires_photo,
-                }
-                await session.execute(
-                    insert(Achievement)
-                    .values(**values)
-                    .on_conflict_do_update(
-                        index_elements=["code"],
-                        set_={k: v for k, v in values.items() if k != "code"},
-                    )
-                )
-            await session.commit()
-        typer.secho(f"seeded {len(ACHIEVEMENTS)} achievements", fg=typer.colors.GREEN)
+            count = await seed_catalogue(session)
+        typer.secho(f"seeded {count} achievements", fg=typer.colors.GREEN)
         await dispose_engine()
 
     asyncio.run(_seed())

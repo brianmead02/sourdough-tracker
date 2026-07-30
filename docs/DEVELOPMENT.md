@@ -63,8 +63,31 @@ indistinguishable from cheating.
 **Web app** — no build step, no `node_modules`; node is only for the tests:
 
 ```bash
-node --test web/test/app.test.mjs                 # 11 tests, browser globals stubbed
+node --test web/test/app.test.mjs                 # 20 tests, browser globals stubbed
+python scripts/check_contrast.py                  # WCAG AA on every declared pair
+python scripts/check_shell_size.py                # offline shell transfer budget
 ```
+
+The two Python checks exist because both problems they catch had already
+happened. `check_contrast.py` parses the custom properties out of `app.css` and
+fails under 4.5:1 — the dark-mode primary button shipped at 2.15:1, which is
+below even the large-text floor. `check_shell_size.py` budgets *compressed*
+transfer size and also fails if any `SHELL` entry in `sw.js` does not exist,
+since `cache.addAll()` rejects on a single 404 and silently leaves every client
+with no offline support at all.
+
+Changing the vendored font is a deliberate act, not an edit:
+
+```bash
+pip install fonttools brotli
+python scripts/build_font.py            # download, subset, write web/vendor/
+python scripts/build_font.py --check    # verify the committed file is reproducible
+```
+
+**Bump `VERSION` in `web/sw.js` after any change under `web/`.** The shell is
+cached cache-first, so without it a redesign ships to nobody — including to you,
+which is worth knowing before you spend an hour wondering why your CSS has no
+effect.
 
 **Android app** — needs Flutter 3.41+:
 
@@ -83,7 +106,7 @@ CI runs all of these, plus a Docker build.
 |---|---|---|---|
 | Python unit | 205 | ~1 s | Nothing — pure functions and static assets |
 | Python integration | 217 | ~65 s | Postgres, Redis, MinIO, ntfy |
-| Browser logic | 11 | <1 s | node, with browser globals stubbed |
+| Browser logic | 20 | <1 s | node, with browser globals stubbed |
 | Dart | 16 | ~2 s | `flutter test` |
 
 Integration tests are marked and **deselected by default** (`addopts = -m 'not
@@ -94,6 +117,27 @@ really go to MinIO and are read back byte-for-byte.
 `test_fermentation.py` has 34 tests running in 60 ms. Reach for an integration
 test when the behaviour *is* the wiring — ownership checks, status codes,
 transaction boundaries.
+
+### The test database
+
+**Integration tests run against `sourdough_test`, never your dev database.** The
+session-scoped `test_database` fixture creates it if absent, migrates it to head
+and seeds the achievement catalogue, then points `POSTGRES_DB` at it for the whole
+run. Override with `TEST_POSTGRES_DB` if you need a different name.
+
+This is not cosmetic separation. The suite empties every table between tests, and
+it originally did that to whatever `POSTGRES_DB` pointed at — so a single
+`pytest -m integration` deleted every account in the dev database, including the
+one you were logged in as, and said nothing about it. `truncate_all()` now
+refuses to run unless the current database name contains `test`:
+
+```
+RuntimeError: refusing to truncate database 'sourdough': the name does not
+contain 'test'.
+```
+
+Lost your dev data to this? `docker compose exec api sdt seed-demo` rebuilds a
+populated account in seconds.
 
 **Every integration test starts on an empty database.** The `client` fixture
 calls `truncate_all()`, which issues one
@@ -126,7 +170,8 @@ app/           FastAPI service
   worker/      Background tasks and the beat schedule
 web/           The PWA — no build step, Alpine vendored in web/vendor/
 mobile/        Flutter Android app; lib/api/models.dart is generated
-scripts/       generate_dart_models.py — Dart models from the OpenAPI schema
+scripts/       build_font.py, check_contrast.py, check_shell_size.py,
+               generate_dart_models.py, backup.sh, loadtest.py
 tests/         Python tests (integration ones are marked)
 ```
 

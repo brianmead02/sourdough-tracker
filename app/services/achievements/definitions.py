@@ -10,11 +10,15 @@ does not re-evaluate forty badges about recipes.
 """
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from app.models.gamification import AchievementCategory as Cat
 from app.models.gamification import Rarity
 from app.services.achievements.metrics import Metric
 from app.services.events import DomainEvent as E
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @dataclass(frozen=True, slots=True)
@@ -586,3 +590,43 @@ BY_CODE: dict[str, AchievementDef] = {a.code: a for a in ACHIEVEMENTS}
 BY_EVENT: dict[E, tuple[AchievementDef, ...]] = {
     event: tuple(a for a in ACHIEVEMENTS if event in a.events) for event in E
 }
+
+
+async def seed_catalogue(session: "AsyncSession") -> int:
+    """Upsert the code catalogue into the `achievement` table.
+
+    The table is a projection of ACHIEVEMENTS, not a second source of truth: it
+    exists so `user_achievement` has something to point a foreign key at, and so
+    the UI can list badges without importing Python. Shared by
+    `sdt seed-achievements` and by the test-database setup, because a catalogue
+    seeded two slightly different ways is a bug waiting to happen.
+
+    Returns the number of definitions written.
+    """
+    from sqlalchemy.dialects.postgresql import insert
+
+    from app.models.gamification import Achievement
+
+    for definition in ACHIEVEMENTS:
+        values = {
+            "code": definition.code,
+            "name": definition.name,
+            "description": definition.description,
+            "category": definition.category,
+            "rarity": definition.rarity,
+            "xp_award": definition.xp_award,
+            "icon": definition.icon,
+            "target": definition.target,
+            "criteria": {"metric": definition.metric.value, **definition.criteria},
+            "requires_photo": definition.requires_photo,
+        }
+        await session.execute(
+            insert(Achievement)
+            .values(**values)
+            .on_conflict_do_update(
+                index_elements=["code"],
+                set_={k: v for k, v in values.items() if k != "code"},
+            )
+        )
+    await session.commit()
+    return len(ACHIEVEMENTS)

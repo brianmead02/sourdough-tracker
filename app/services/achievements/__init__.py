@@ -1,6 +1,11 @@
 """Achievement catalogue, metrics and evaluation engine."""
 
-from app.services.achievements.definitions import ACHIEVEMENTS, BY_CODE, AchievementDef
+from app.services.achievements.definitions import (
+    ACHIEVEMENTS,
+    BY_CODE,
+    AchievementDef,
+    seed_catalogue,
+)
 from app.services.achievements.engine import (
     AchievementProgress,
     Award,
@@ -23,4 +28,5 @@ __all__ = [
     "measure",
     "progress_for",
     "publish",
+    "seed_catalogue",
 ]

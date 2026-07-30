@@ -7,12 +7,67 @@
 import { api, ApiError, clearSession, flushQueue, isAuthenticated, login, logout, register, verifyEmail } from './api.js';
 import { pendingCount } from './db.js';
 
-const ROUTES = ['dashboard', 'starters', 'proofing', 'bakes', 'recipes', 'inventory',
+export const ROUTES = ['dashboard', 'starters', 'proofing', 'bakes', 'recipes', 'inventory',
   'achievements', 'leaderboard', 'settings'];
+
+// Navigation is data, not markup. It used to be six hand-written buttons, and
+// because ROUTES has nine entries, inventory, achievements and leaderboard were
+// reachable only by typing the hash. A test asserts these two lists cover ROUTES.
+export const PRIMARY = [
+  { route: 'dashboard', label: 'Today', icon: 'home' },
+  { route: 'starters', label: 'Starters', icon: 'jar' },
+  { route: 'proofing', label: 'Proof', icon: 'timer' },
+  { route: 'bakes', label: 'Bakes', icon: 'bread' },
+  { route: 'recipes', label: 'Recipes', icon: 'book' },
+];
+
+export const SECONDARY = [
+  { route: 'inventory', label: 'Inventory', icon: 'box', hint: 'Flour, stock and per-loaf cost' },
+  { route: 'achievements', label: 'Badges', icon: 'medal', hint: 'Which ones you have earned' },
+  { route: 'leaderboard', label: 'Ranking', icon: 'chart', hint: 'Where you stand this season' },
+  { route: 'settings', label: 'Settings', icon: 'sliders', hint: 'Reminders, quiet hours, devices' },
+];
+
+export const NAVIGABLE = [...PRIMARY, ...SECONDARY].map((d) => d.route);
+
+export const TITLES = Object.fromEntries(
+  [...PRIMARY, ...SECONDARY].map((d) => [d.route, d.label]),
+);
+TITLES.dashboard = 'Today';
+
+// Labels, not capitalised keys: text-transform turned 'xp' into 'Xp'.
+export const BOARD_CATEGORIES = [
+  { key: 'xp', label: 'Season XP' },
+  { key: 'lifetime', label: 'Lifetime XP' },
+  { key: 'bakes', label: 'Bakes' },
+  { key: 'streak', label: 'Streak' },
+  { key: 'crumb', label: 'Crumb' },
+  { key: 'achievements', label: 'Badges' },
+];
+
+const THEMES = ['auto', 'light', 'dark'];
 
 function currentRoute() {
   const hash = location.hash.replace(/^#\/?/, '').split('?')[0];
   return ROUTES.includes(hash) ? hash : 'dashboard';
+}
+
+function storedTheme() {
+  try {
+    const value = localStorage.getItem('sd-theme');
+    return THEMES.includes(value) ? value : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+// 'auto' means "remove the attribute and let prefers-color-scheme decide". The
+// explicit values have to win in both directions, which is why the stylesheet
+// defines data-theme="light" as well as dark.
+export function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === 'auto') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', theme);
 }
 
 export function app() {
@@ -61,9 +116,18 @@ export function app() {
     notifSettings: null,
     channels: [],
     showNew: null,
+    moreOpen: false,
+    theme: storedTheme(),
+
+    // exposed so the markup iterates data instead of repeating buttons
+    PRIMARY,
+    SECONDARY,
+    TITLES,
+    BOARD_CATEGORIES,
 
     // --- lifecycle -----------------------------------------------------
     async init() {
+      applyTheme(this.theme);
       this.authed = isAuthenticated();
       window.addEventListener('hashchange', () => this.go(currentRoute(), false));
       window.addEventListener('online', () => this.onNetwork(true));
@@ -131,8 +195,21 @@ export function app() {
     go(view, updateHash = true) {
       this.view = ROUTES.includes(view) ? view : 'dashboard';
       this.showNew = null;
+      this.moreOpen = false;
       if (updateHash) location.hash = `#/${this.view}`;
       if (this.authed) this.load(this.view);
+    },
+
+    title() { return TITLES[this.view] ?? 'Today'; },
+
+    cycleTheme() {
+      this.theme = THEMES[(THEMES.indexOf(this.theme) + 1) % THEMES.length];
+      applyTheme(this.theme);
+      try { localStorage.setItem('sd-theme', this.theme); } catch { /* private mode */ }
+    },
+
+    themeIcon() {
+      return this.theme === 'light' ? 'sun' : this.theme === 'dark' ? 'moon' : 'auto';
     },
 
     // --- data loading --------------------------------------------------

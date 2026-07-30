@@ -18,6 +18,9 @@ services:
       # Tool config (ruff/mypy/pytest) lives here, so mounting it means a lint
       # rule change does not need an image rebuild. Dependency changes still do.
       - ./pyproject.toml:/srv/app/pyproject.toml:ro
+      # Same reasoning: alembic config is edited far more often than dependencies,
+      # and without this an alembic.ini change silently has no effect until rebuild.
+      - ./alembic.ini:/srv/app/alembic.ini:ro
       # The PWA, served by the API in dev (Caddy serves it directly in prod).
       - ./web:/srv/app/web:ro
     ports:

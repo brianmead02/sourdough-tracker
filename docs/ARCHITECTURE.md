@@ -369,9 +369,12 @@ feeding before it. The drain policy is deliberate:
 so two concurrent 401s would both rotate and the loser's token would look to the
 server exactly like a replayed — i.e. stolen — token, killing the session.
 
-Browser logic is tested with `node --test web/test/app.test.mjs`: 11 tests over
-the countdown maths and the outbox drain policy, with browser globals stubbed so
-the modules under test are the ones shipped. Static wiring — every referenced
+Browser logic is tested with `node --test web/test/app.test.mjs`: 20 tests over
+the countdown maths, the outbox drain policy, theme persistence, and **whether
+every route is reachable from the navigation** — three of the nine views once
+shipped with no link to them, so `PRIMARY ∪ SECONDARY` is now asserted to cover
+`ROUTES`. Browser globals are stubbed so the modules under test are the ones
+shipped. Static wiring — every referenced
 asset, every precache entry, every Alpine binding resolving to something that
 exists — is checked in `tests/test_pwa_assets.py`, because a missing icon or a
 dangling handler fails silently in a browser.
@@ -469,16 +472,20 @@ eta  = target_rise_fraction / rate
 |---|---|---|
 | Unit | 205 | Nothing — pure functions and static assets |
 | Integration | 217 | Live Postgres, Redis, MinIO and ntfy |
-| Browser logic | 11 | node, with browser globals stubbed |
+| Browser logic | 20 | node, with browser globals stubbed |
 | Dart | 16 | `flutter test`, plus `flutter analyze` and a real APK build |
 
 Integration tests are marked and deselected by default (`pytest -m integration`
 to run them). They exercise the real stack: real SMTP delivery into Mailhog, real
 uploads into MinIO with byte-for-byte read-back, real token rotation.
 
-Each integration test begins on an empty database: the `client` fixture issues
-one `TRUNCATE ... RESTART IDENTITY CASCADE` over every table except
-`alembic_version` and `achievement`. Those two are preserved deliberately —
+Integration tests run against a dedicated `sourdough_test` database, created and
+migrated by a session fixture. Each test then begins on an empty one: the
+`client` fixture issues a `TRUNCATE ... RESTART IDENTITY CASCADE` over every
+table except `alembic_version` and `achievement`, and **refuses outright if the
+database name does not contain `test`**. That guard exists because the first
+version of this truncated whatever `POSTGRES_DB` pointed at, which meant running
+the suite silently emptied the developer's own database. Those two are preserved deliberately —
 the first is the migration bookmark, the second the seeded badge catalogue that
 the gamification engine reads on every evaluation. Truncating either would mean
 re-running a migration or a seed per test.
