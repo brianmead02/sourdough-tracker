@@ -10,9 +10,10 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, VerifiedUser
+from app.api.deps import CurrentUser, UnitsPref, VerifiedUser
 from app.db import get_session
 from app.models.notification import NotificationEvent
+from app.models.recipe import IngredientKind
 from app.models.starter import Feeding, Starter, StarterObservation, StarterState
 from app.schemas.starter import (
     FeedingCreate,
@@ -31,6 +32,8 @@ from app.schemas.starter import (
 from app.services import starters as starter_service
 from app.services.achievements import publish
 from app.services.events import DomainEvent
+from app.services.measurements import store as measure_store
+from app.services.measurements.present import display_for
 from app.services.notifications import cancel_prefix, schedule
 
 router = APIRouter(prefix="/starters", tags=["starters"])
@@ -383,7 +386,11 @@ async def get_streak(
 
 @router.post("/{starter_id}/suggested-feed", response_model=SuggestedFeedResponse)
 async def suggested_feed(
-    starter_id: uuid.UUID, payload: SuggestFeedRequest, user: CurrentUser, session: SessionDep
+    starter_id: uuid.UUID,
+    payload: SuggestFeedRequest,
+    user: CurrentUser,
+    session: SessionDep,
+    units: UnitsPref,
 ) -> SuggestedFeedResponse:
     starter = await _get_owned_starter(starter_id, user.id, session)
     suggestion = starter_service.suggest_feed(
@@ -393,4 +400,21 @@ async def suggested_feed(
         starter_g=payload.starter_g,
         total_g=payload.total_g,
     )
-    return SuggestedFeedResponse(**asdict(suggestion))
+    response = SuggestedFeedResponse(**asdict(suggestion))
+    overrides = await measure_store.load_overrides(session, user.id)
+    response.flour_display = display_for(
+        response.flour_g,
+        units,
+        ingredient=starter.flour_type or "flour",
+        kind=IngredientKind.flour,
+        overrides=overrides,
+    )
+    response.water_display = display_for(
+        response.water_g, units, ingredient="water", kind=IngredientKind.liquid
+    )
+    # Starter deliberately has no volume rendering: a peaked levain is mostly gas,
+    # so this comes back as an exact mass instead.
+    response.starter_display = display_for(
+        response.starter_g, units, ingredient="starter", kind=IngredientKind.starter
+    )
+    return response

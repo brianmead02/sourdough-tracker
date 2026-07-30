@@ -144,3 +144,20 @@ def scale(
         loaf_count=loaf_count,
         loaf_weight_g=round(total_dough / loaf_count, 1),
     )
+
+
+def to_percentages(entries: Sequence[tuple[IngredientKind, float]]) -> list[float]:
+    """Convert absolute masses into baker's percentages.
+
+    Baker's percentage is relative to *total flour*, not total dough, so this is
+    not a plain normalisation: 1000 g flour with 700 g water is 100% and 70%,
+    summing to 170%.
+
+    Used when a baker enters a recipe as quantities ("3 cups flour, 1 1/2 cups
+    water") instead of percentages. Pure — the caller has already turned any
+    volumes into grams.
+    """
+    total_flour = sum(grams for kind, grams in entries if kind is IngredientKind.flour)
+    if total_flour <= 0:
+        raise RecipeError("a recipe needs at least one flour with a positive amount")
+    return [round(grams / total_flour * 100, 4) for _, grams in entries]

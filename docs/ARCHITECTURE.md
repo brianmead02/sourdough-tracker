@@ -369,7 +369,7 @@ feeding before it. The drain policy is deliberate:
 so two concurrent 401s would both rotate and the loser's token would look to the
 server exactly like a replayed — i.e. stolen — token, killing the session.
 
-Browser logic is tested with `node --test web/test/app.test.mjs`: 20 tests over
+Browser logic is tested with `node --test web/test/app.test.mjs`: 24 tests over
 the countdown maths, the outbox drain policy, theme persistence, and **whether
 every route is reachable from the navigation** — three of the nine views once
 shipped with no link to them, so `PRIMARY ∪ SECONDARY` is now asserted to cover
@@ -470,9 +470,9 @@ eta  = target_rise_fraction / rate
 
 | Layer | Count | Runs against |
 |---|---|---|
-| Unit | 205 | Nothing — pure functions and static assets |
-| Integration | 217 | Live Postgres, Redis, MinIO and ntfy |
-| Browser logic | 20 | node, with browser globals stubbed |
+| Unit | 288 | Nothing — pure functions and static assets |
+| Integration | 262 | Live Postgres, Redis, MinIO and ntfy |
+| Browser logic | 24 | node, with browser globals stubbed |
 | Dart | 16 | `flutter test`, plus `flutter analyze` and a real APK build |
 
 Integration tests are marked and deselected by default (`pytest -m integration`

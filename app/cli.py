@@ -162,6 +162,22 @@ def seed_achievements() -> None:
     asyncio.run(_seed())
 
 
+@app.command("seed-measurements")
+def seed_measurements() -> None:
+    """Project the ingredient density catalogue into the measurement table."""
+
+    async def _seed() -> None:
+        from app.db import dispose_engine, get_session_factory
+        from app.services.measurements.catalogue import seed_measures
+
+        async with get_session_factory()() as session:
+            count = await seed_measures(session)
+        typer.secho(f"seeded {count} ingredient densities", fg=typer.colors.GREEN)
+        await dispose_engine()
+
+    asyncio.run(_seed())
+
+
 @app.command("seed-demo")
 def seed_demo(
     email: str = typer.Option("demo@example.com"),

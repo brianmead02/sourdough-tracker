@@ -141,6 +141,52 @@ class ActiveProofSession {
       );
 }
 
+/// `AdminUserRow` from the API schema.
+class AdminUserRow {
+  final String id;
+  final String email;
+  final String handle;
+  final String displayName;
+  final String role;
+  final bool isVerified;
+  final bool isSuspended;
+  final String? suspendedReason;
+  final DateTime createdAt;
+  final DateTime? lastLoginAt;
+  final int publicRecipes;
+  final int bakes;
+
+  const AdminUserRow({
+    required this.id,
+    required this.email,
+    required this.handle,
+    required this.displayName,
+    required this.role,
+    required this.isVerified,
+    required this.isSuspended,
+    this.suspendedReason,
+    required this.createdAt,
+    this.lastLoginAt,
+    required this.publicRecipes,
+    required this.bakes,
+  });
+
+  factory AdminUserRow.fromJson(Map<String, dynamic> json) => AdminUserRow(
+    id: (json['id'] as String?)!,
+    email: (json['email'] as String?)!,
+    handle: (json['handle'] as String?)!,
+    displayName: (json['display_name'] as String?)!,
+    role: (json['role'] as String?)!,
+    isVerified: (json['is_verified'] as bool?)!,
+    isSuspended: (json['is_suspended'] as bool?)!,
+    suspendedReason: json['suspended_reason'] as String?,
+    createdAt: (_date(json['created_at']))!,
+    lastLoginAt: _date(json['last_login_at']),
+    publicRecipes: (_int(json['public_recipes']))!,
+    bakes: (_int(json['bakes']))!,
+  );
+}
+
 /// `AwardResponse` from the API schema.
 class AwardResponse {
   final String code;
@@ -666,6 +712,103 @@ class ConsumptionResponse {
       );
 }
 
+/// `ConversionResult` from the API schema.
+class ConversionResult {
+  final double? value;
+  final String unit;
+  final String? basis;
+  final bool? approximate;
+  final String? sourceSlug;
+  final String? error;
+
+  const ConversionResult({
+    this.value,
+    required this.unit,
+    this.basis,
+    this.approximate,
+    this.sourceSlug,
+    this.error,
+  });
+
+  factory ConversionResult.fromJson(Map<String, dynamic> json) =>
+      ConversionResult(
+        value: _double(json['value']),
+        unit: (json['unit'] as String?)!,
+        basis: json['basis'] as String?,
+        approximate: json['approximate'] as bool?,
+        sourceSlug: json['source_slug'] as String?,
+        error: json['error'] as String?,
+      );
+}
+
+/// `ConvertItem` from the API schema.
+class ConvertItem {
+  final double value;
+  final String from;
+  final String to;
+  final String? ingredient;
+  final String? kind;
+
+  const ConvertItem({
+    required this.value,
+    required this.from,
+    required this.to,
+    this.ingredient,
+    this.kind,
+  });
+
+  factory ConvertItem.fromJson(Map<String, dynamic> json) => ConvertItem(
+    value: (_double(json['value']))!,
+    from: (json['from'] as String?)!,
+    to: (json['to'] as String?)!,
+    ingredient: json['ingredient'] as String?,
+    kind: json['kind'] as String?,
+  );
+}
+
+/// `ConvertRequest` from the API schema.
+class ConvertRequest {
+  final List<ConvertItem> items;
+
+  const ConvertRequest({required this.items});
+
+  factory ConvertRequest.fromJson(Map<String, dynamic> json) => ConvertRequest(
+    items: (json['items'] == null
+        ? null
+        : (json['items'] as List)
+              .map(
+                (e) => (e == null
+                    ? null
+                    : ConvertItem.fromJson(e as Map<String, dynamic>))!,
+              )
+              .toList()
+              .cast<ConvertItem>())!,
+  );
+}
+
+/// `ConvertResponse` from the API schema.
+class ConvertResponse {
+  final List<ConversionResult> results;
+
+  const ConvertResponse({required this.results});
+
+  factory ConvertResponse.fromJson(Map<String, dynamic> json) =>
+      ConvertResponse(
+        results: (json['results'] == null
+            ? null
+            : (json['results'] as List)
+                  .map(
+                    (e) => (e == null
+                        ? null
+                        : ConversionResult.fromJson(
+                            e as Map<String, dynamic>,
+                          ))!,
+                  )
+                  .toList()
+                  .cast<ConversionResult>())!,
+      );
+}
+
 /// `CostReport` from the API schema.
 class CostReport {
   final DateTime? fromDate;
@@ -740,6 +883,42 @@ class CurrentUserResponse {
         profile: (json['profile'] == null
             ? null
             : OwnProfile.fromJson(json['profile'] as Map<String, dynamic>))!,
+      );
+}
+
+/// Erasure is irreversible, so it takes both a password and a typed phrase.
+class DeleteAccountRequest {
+  final String password;
+  final String confirm;
+
+  const DeleteAccountRequest({required this.password, required this.confirm});
+
+  factory DeleteAccountRequest.fromJson(Map<String, dynamic> json) =>
+      DeleteAccountRequest(
+        password: (json['password'] as String?)!,
+        confirm: (json['confirm'] as String?)!,
+      );
+}
+
+/// `DeleteAccountResponse` from the API schema.
+class DeleteAccountResponse {
+  final bool deleted;
+  final Map<String, dynamic> rowsRemoved;
+  final int photosRemoved;
+
+  const DeleteAccountResponse({
+    required this.deleted,
+    required this.rowsRemoved,
+    required this.photosRemoved,
+  });
+
+  factory DeleteAccountResponse.fromJson(Map<String, dynamic> json) =>
+      DeleteAccountResponse(
+        deleted: (json['deleted'] as bool?)!,
+        rowsRemoved: (json['rows_removed'] == null
+            ? null
+            : Map<String, dynamic>.from(json['rows_removed'] as Map))!,
+        photosRemoved: (_int(json['photos_removed']))!,
       );
 }
 
@@ -1002,23 +1181,75 @@ class InboxPage {
   );
 }
 
-/// `IngredientInput` from the API schema.
+/// One recipe line, as a percentage *or* as an amount.
 class IngredientInput {
   final String name;
   final String kind;
-  final double percentage;
+  final double? percentage;
+  final double? amount;
+  final String? unit;
 
   const IngredientInput({
     required this.name,
     required this.kind,
-    required this.percentage,
+    this.percentage,
+    this.amount,
+    this.unit,
   });
 
   factory IngredientInput.fromJson(Map<String, dynamic> json) =>
       IngredientInput(
         name: (json['name'] as String?)!,
         kind: (json['kind'] as String?)!,
-        percentage: (_double(json['percentage']))!,
+        percentage: _double(json['percentage']),
+        amount: _double(json['amount']),
+        unit: json['unit'] as String?,
+      );
+}
+
+/// `IngredientMeasureResponse` from the API schema.
+class IngredientMeasureResponse {
+  final String slug;
+  final String name;
+  final String kind;
+  final double gramsPerCup;
+  final String method;
+  final String source;
+  final List<String> aliases;
+  final bool volumeAllowed;
+  final String? reason;
+  final bool? overridden;
+
+  const IngredientMeasureResponse({
+    required this.slug,
+    required this.name,
+    required this.kind,
+    required this.gramsPerCup,
+    required this.method,
+    required this.source,
+    required this.aliases,
+    required this.volumeAllowed,
+    this.reason,
+    this.overridden,
+  });
+
+  factory IngredientMeasureResponse.fromJson(Map<String, dynamic> json) =>
+      IngredientMeasureResponse(
+        slug: (json['slug'] as String?)!,
+        name: (json['name'] as String?)!,
+        kind: (json['kind'] as String?)!,
+        gramsPerCup: (_double(json['grams_per_cup']))!,
+        method: (json['method'] as String?)!,
+        source: (json['source'] as String?)!,
+        aliases: (json['aliases'] == null
+            ? null
+            : (json['aliases'] as List)
+                  .map((e) => (e as String?)!)
+                  .toList()
+                  .cast<String>())!,
+        volumeAllowed: (json['volume_allowed'] as bool?)!,
+        reason: json['reason'] as String?,
+        overridden: json['overridden'] as bool?,
       );
 }
 
@@ -1043,6 +1274,61 @@ class IngredientResponse {
         percentage: (_double(json['percentage']))!,
         sortOrder: (_int(json['sort_order']))!,
       );
+}
+
+/// `InstanceStats` from the API schema.
+class InstanceStats {
+  final int usersTotal;
+  final int usersVerified;
+  final int usersSuspended;
+  final int starters;
+  final int feedings;
+  final int proofSessions;
+  final int bakes;
+  final int recipes;
+  final int recipesPublic;
+  final int photos;
+  final int notificationsPending;
+  final int notificationsFailed;
+  final int xpAwarded;
+  final int achievementsEarned;
+  final int databaseBytes;
+
+  const InstanceStats({
+    required this.usersTotal,
+    required this.usersVerified,
+    required this.usersSuspended,
+    required this.starters,
+    required this.feedings,
+    required this.proofSessions,
+    required this.bakes,
+    required this.recipes,
+    required this.recipesPublic,
+    required this.photos,
+    required this.notificationsPending,
+    required this.notificationsFailed,
+    required this.xpAwarded,
+    required this.achievementsEarned,
+    required this.databaseBytes,
+  });
+
+  factory InstanceStats.fromJson(Map<String, dynamic> json) => InstanceStats(
+    usersTotal: (_int(json['users_total']))!,
+    usersVerified: (_int(json['users_verified']))!,
+    usersSuspended: (_int(json['users_suspended']))!,
+    starters: (_int(json['starters']))!,
+    feedings: (_int(json['feedings']))!,
+    proofSessions: (_int(json['proof_sessions']))!,
+    bakes: (_int(json['bakes']))!,
+    recipes: (_int(json['recipes']))!,
+    recipesPublic: (_int(json['recipes_public']))!,
+    photos: (_int(json['photos']))!,
+    notificationsPending: (_int(json['notifications_pending']))!,
+    notificationsFailed: (_int(json['notifications_failed']))!,
+    xpAwarded: (_int(json['xp_awarded']))!,
+    achievementsEarned: (_int(json['achievements_earned']))!,
+    databaseBytes: (_int(json['database_bytes']))!,
+  );
 }
 
 /// `ItemCreate` from the API schema.
@@ -1076,6 +1362,7 @@ class ItemResponse {
   final String? notes;
   final DateTime createdAt;
   final double onHandG;
+  final MeasureDisplay? onHandDisplay;
   final double? averageCostPerKg;
   final double? stockValue;
   final bool isLow;
@@ -1088,6 +1375,7 @@ class ItemResponse {
     this.notes,
     required this.createdAt,
     required this.onHandG,
+    this.onHandDisplay,
     this.averageCostPerKg,
     this.stockValue,
     required this.isLow,
@@ -1101,6 +1389,11 @@ class ItemResponse {
     notes: json['notes'] as String?,
     createdAt: (_date(json['created_at']))!,
     onHandG: (_double(json['on_hand_g']))!,
+    onHandDisplay: json['on_hand_display'] == null
+        ? null
+        : MeasureDisplay.fromJson(
+            json['on_hand_display'] as Map<String, dynamic>,
+          ),
     averageCostPerKg: _double(json['average_cost_per_kg']),
     stockValue: _double(json['stock_value']),
     isLow: (json['is_low'] as bool?)!,
@@ -1234,6 +1527,37 @@ class MarkReadRequest {
       );
 }
 
+/// A quantity rendered for a baker, carrying its own inaccuracy.
+class MeasureDisplay {
+  final String text;
+  final String system;
+  final String basis;
+  final bool approximate;
+  final double grams;
+  final double driftPct;
+  final bool adviseWeighing;
+
+  const MeasureDisplay({
+    required this.text,
+    required this.system,
+    required this.basis,
+    required this.approximate,
+    required this.grams,
+    required this.driftPct,
+    required this.adviseWeighing,
+  });
+
+  factory MeasureDisplay.fromJson(Map<String, dynamic> json) => MeasureDisplay(
+    text: (json['text'] as String?)!,
+    system: (json['system'] as String?)!,
+    basis: (json['basis'] as String?)!,
+    approximate: (json['approximate'] as bool?)!,
+    grams: (_double(json['grams']))!,
+    driftPct: (_double(json['drift_pct']))!,
+    adviseWeighing: (json['advise_weighing'] as bool?)!,
+  );
+}
+
 /// `MessageResponse` from the API schema.
 class MessageResponse {
   final String message;
@@ -1242,6 +1566,51 @@ class MessageResponse {
 
   factory MessageResponse.fromJson(Map<String, dynamic> json) =>
       MessageResponse(message: (json['message'] as String?)!);
+}
+
+/// A published recipe awaiting a look.
+class ModerationItem {
+  final String recipeId;
+  final String name;
+  final String? description;
+  final String ownerId;
+  final String ownerHandle;
+  final bool ownerSuspended;
+  final List<String> tags;
+  final int starCount;
+  final int forkCount;
+  final DateTime createdAt;
+
+  const ModerationItem({
+    required this.recipeId,
+    required this.name,
+    this.description,
+    required this.ownerId,
+    required this.ownerHandle,
+    required this.ownerSuspended,
+    required this.tags,
+    required this.starCount,
+    required this.forkCount,
+    required this.createdAt,
+  });
+
+  factory ModerationItem.fromJson(Map<String, dynamic> json) => ModerationItem(
+    recipeId: (json['recipe_id'] as String?)!,
+    name: (json['name'] as String?)!,
+    description: json['description'] as String?,
+    ownerId: (json['owner_id'] as String?)!,
+    ownerHandle: (json['owner_handle'] as String?)!,
+    ownerSuspended: (json['owner_suspended'] as bool?)!,
+    tags: (json['tags'] == null
+        ? null
+        : (json['tags'] as List)
+              .map((e) => (e as String?)!)
+              .toList()
+              .cast<String>())!,
+    starCount: (_int(json['star_count']))!,
+    forkCount: (_int(json['fork_count']))!,
+    createdAt: (_date(json['created_at']))!,
+  );
 }
 
 /// `MyRankResponse` from the API schema.
@@ -1370,6 +1739,20 @@ class ObservationResponse {
       );
 }
 
+/// `OverrideRequest` from the API schema.
+class OverrideRequest {
+  final double gramsPerCup;
+  final String? note;
+
+  const OverrideRequest({required this.gramsPerCup, this.note});
+
+  factory OverrideRequest.fromJson(Map<String, dynamic> json) =>
+      OverrideRequest(
+        gramsPerCup: (_double(json['grams_per_cup']))!,
+        note: json['note'] as String?,
+      );
+}
+
 /// `OwnProfile` from the API schema.
 class OwnProfile {
   final String handle;
@@ -1378,6 +1761,7 @@ class OwnProfile {
   final String? avatarObjectKey;
   final bool isPublic;
   final String timezone;
+  final String units;
 
   const OwnProfile({
     required this.handle,
@@ -1386,6 +1770,7 @@ class OwnProfile {
     this.avatarObjectKey,
     required this.isPublic,
     required this.timezone,
+    required this.units,
   });
 
   factory OwnProfile.fromJson(Map<String, dynamic> json) => OwnProfile(
@@ -1395,6 +1780,7 @@ class OwnProfile {
     avatarObjectKey: json['avatar_object_key'] as String?,
     isPublic: (json['is_public'] as bool?)!,
     timezone: (json['timezone'] as String?)!,
+    units: (json['units'] as String?)!,
   );
 }
 
@@ -1499,12 +1885,14 @@ class ProfileUpdate {
   final String? bio;
   final bool? isPublic;
   final String? timezone;
+  final String? units;
 
   const ProfileUpdate({
     this.displayName,
     this.bio,
     this.isPublic,
     this.timezone,
+    this.units,
   });
 
   factory ProfileUpdate.fromJson(Map<String, dynamic> json) => ProfileUpdate(
@@ -1512,6 +1900,7 @@ class ProfileUpdate {
     bio: json['bio'] as String?,
     isPublic: json['is_public'] as bool?,
     timezone: json['timezone'] as String?,
+    units: json['units'] as String?,
   );
 }
 
@@ -1520,6 +1909,7 @@ class ProofCheckCreate {
   final DateTime? checkedAt;
   final double risePct;
   final double? doughTempC;
+  final double? doughTempF;
   final String? pokeTest;
   final String? notes;
 
@@ -1527,6 +1917,7 @@ class ProofCheckCreate {
     this.checkedAt,
     required this.risePct,
     this.doughTempC,
+    this.doughTempF,
     this.pokeTest,
     this.notes,
   });
@@ -1536,6 +1927,7 @@ class ProofCheckCreate {
         checkedAt: _date(json['checked_at']),
         risePct: (_double(json['rise_pct']))!,
         doughTempC: _double(json['dough_temp_c']),
+        doughTempF: _double(json['dough_temp_f']),
         pokeTest: json['poke_test'] as String?,
         notes: json['notes'] as String?,
       );
@@ -1598,8 +1990,10 @@ class ProofSessionCreate {
   final String? starterId;
   final String? bakeId;
   final DateTime? startedAt;
-  final double doughTempC;
+  final double? doughTempC;
+  final double? doughTempF;
   final double? ambientTempC;
+  final double? ambientTempF;
   final double? starterPct;
   final double? hydrationPct;
   final double? targetRisePct;
@@ -1611,8 +2005,10 @@ class ProofSessionCreate {
     this.starterId,
     this.bakeId,
     this.startedAt,
-    required this.doughTempC,
+    this.doughTempC,
+    this.doughTempF,
     this.ambientTempC,
+    this.ambientTempF,
     this.starterPct,
     this.hydrationPct,
     this.targetRisePct,
@@ -1626,8 +2022,10 @@ class ProofSessionCreate {
         starterId: json['starter_id'] as String?,
         bakeId: json['bake_id'] as String?,
         startedAt: _date(json['started_at']),
-        doughTempC: (_double(json['dough_temp_c']))!,
+        doughTempC: _double(json['dough_temp_c']),
+        doughTempF: _double(json['dough_temp_f']),
         ambientTempC: _double(json['ambient_temp_c']),
+        ambientTempF: _double(json['ambient_temp_f']),
         starterPct: _double(json['starter_pct']),
         hydrationPct: _double(json['hydration_pct']),
         targetRisePct: _double(json['target_rise_pct']),
@@ -2091,12 +2489,14 @@ class ScaledIngredientResponse {
   final String kind;
   final double percentage;
   final double grams;
+  final MeasureDisplay? display;
 
   const ScaledIngredientResponse({
     required this.name,
     required this.kind,
     required this.percentage,
     required this.grams,
+    this.display,
   });
 
   factory ScaledIngredientResponse.fromJson(Map<String, dynamic> json) =>
@@ -2105,6 +2505,9 @@ class ScaledIngredientResponse {
         kind: (json['kind'] as String?)!,
         percentage: (_double(json['percentage']))!,
         grams: (_double(json['grams']))!,
+        display: json['display'] == null
+            ? null
+            : MeasureDisplay.fromJson(json['display'] as Map<String, dynamic>),
       );
 }
 
@@ -2537,6 +2940,9 @@ class SuggestedFeedResponse {
   final double waterG;
   final double totalG;
   final double hydrationPct;
+  final MeasureDisplay? starterDisplay;
+  final MeasureDisplay? flourDisplay;
+  final MeasureDisplay? waterDisplay;
 
   const SuggestedFeedResponse({
     required this.starterG,
@@ -2544,6 +2950,9 @@ class SuggestedFeedResponse {
     required this.waterG,
     required this.totalG,
     required this.hydrationPct,
+    this.starterDisplay,
+    this.flourDisplay,
+    this.waterDisplay,
   });
 
   factory SuggestedFeedResponse.fromJson(Map<String, dynamic> json) =>
@@ -2553,7 +2962,32 @@ class SuggestedFeedResponse {
         waterG: (_double(json['water_g']))!,
         totalG: (_double(json['total_g']))!,
         hydrationPct: (_double(json['hydration_pct']))!,
+        starterDisplay: json['starter_display'] == null
+            ? null
+            : MeasureDisplay.fromJson(
+                json['starter_display'] as Map<String, dynamic>,
+              ),
+        flourDisplay: json['flour_display'] == null
+            ? null
+            : MeasureDisplay.fromJson(
+                json['flour_display'] as Map<String, dynamic>,
+              ),
+        waterDisplay: json['water_display'] == null
+            ? null
+            : MeasureDisplay.fromJson(
+                json['water_display'] as Map<String, dynamic>,
+              ),
       );
+}
+
+/// `SuspendRequest` from the API schema.
+class SuspendRequest {
+  final String reason;
+
+  const SuspendRequest({required this.reason});
+
+  factory SuspendRequest.fromJson(Map<String, dynamic> json) =>
+      SuspendRequest(reason: (json['reason'] as String?)!);
 }
 
 /// `TestNotificationRequest` from the API schema.
@@ -2631,7 +3065,9 @@ class TokenResponse {
 /// `TransactionCreate` from the API schema.
 class TransactionCreate {
   final String kind;
-  final double quantityG;
+  final double? quantityG;
+  final double? quantity;
+  final String? unit;
   final double? unitCostPerKg;
   final DateTime? occurredAt;
   final String? note;
@@ -2639,7 +3075,9 @@ class TransactionCreate {
 
   const TransactionCreate({
     required this.kind,
-    required this.quantityG,
+    this.quantityG,
+    this.quantity,
+    this.unit,
     this.unitCostPerKg,
     this.occurredAt,
     this.note,
@@ -2649,7 +3087,9 @@ class TransactionCreate {
   factory TransactionCreate.fromJson(Map<String, dynamic> json) =>
       TransactionCreate(
         kind: (json['kind'] as String?)!,
-        quantityG: (_double(json['quantity_g']))!,
+        quantityG: _double(json['quantity_g']),
+        quantity: _double(json['quantity']),
+        unit: json['unit'] as String?,
         unitCostPerKg: _double(json['unit_cost_per_kg']),
         occurredAt: _date(json['occurred_at']),
         note: json['note'] as String?,
@@ -2690,6 +3130,54 @@ class TransactionResponse {
         note: json['note'] as String?,
         bakeId: json['bake_id'] as String?,
       );
+}
+
+/// `UnitCatalogueResponse` from the API schema.
+class UnitCatalogueResponse {
+  final List<UnitInfo> units;
+  final String note;
+
+  const UnitCatalogueResponse({required this.units, required this.note});
+
+  factory UnitCatalogueResponse.fromJson(Map<String, dynamic> json) =>
+      UnitCatalogueResponse(
+        units: (json['units'] == null
+            ? null
+            : (json['units'] as List)
+                  .map(
+                    (e) => (e == null
+                        ? null
+                        : UnitInfo.fromJson(e as Map<String, dynamic>))!,
+                  )
+                  .toList()
+                  .cast<UnitInfo>())!,
+        note: (json['note'] as String?)!,
+      );
+}
+
+/// One unit and its exact relationship to the base of its family.
+class UnitInfo {
+  final String unit;
+  final String label;
+  final String family;
+  final double? grams;
+  final double? millilitres;
+
+  const UnitInfo({
+    required this.unit,
+    required this.label,
+    required this.family,
+    this.grams,
+    this.millilitres,
+  });
+
+  factory UnitInfo.fromJson(Map<String, dynamic> json) => UnitInfo(
+    unit: (json['unit'] as String?)!,
+    label: (json['label'] as String?)!,
+    family: (json['family'] as String?)!,
+    grams: _double(json['grams']),
+    millilitres: _double(json['millilitres']),
+  );
 }
 
 /// `VerifyEmailRequest` from the API schema.

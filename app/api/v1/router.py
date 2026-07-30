@@ -10,6 +10,7 @@ from app.api.v1 import (
     health,
     inventory,
     leaderboard,
+    measurements,
     media,
     notifications,
     profiles,
@@ -27,6 +28,7 @@ api_router.include_router(proofing.router)
 api_router.include_router(recipes.router)
 api_router.include_router(bakes.router)
 api_router.include_router(inventory.router)
+api_router.include_router(measurements.router)
 api_router.include_router(media.router)
 api_router.include_router(notifications.router)
 api_router.include_router(gamification.router)

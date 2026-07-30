@@ -47,6 +47,38 @@ export const BOARD_CATEGORIES = [
 
 const THEMES = ['auto', 'light', 'dark'];
 
+/**
+ * Parse "5 lb", "10 cup", "2000" into a transaction body.
+ *
+ * Exported and pure so it can be tested: this is the one place in the client
+ * where a baker's typing becomes a quantity, and getting the unit wrong stores a
+ * wrong number rather than showing one. A bare number means grams, matching the
+ * field it replaces.
+ *
+ * Returns null for anything unparseable — the caller must not guess.
+ */
+export function parseAmount(text) {
+  const match = String(text ?? '').trim().match(/^([\d.]+)\s*([a-zA-Z_ ]*)$/);
+  const amount = Number(match?.[1]);
+  if (!match || !Number.isFinite(amount) || amount <= 0) return null;
+
+  const unit = (match[2] ?? '').trim().toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/e?s$/, '');            // cups -> cup, ounces -> ounce
+  const ALIASES = {
+    '': 'g', g: 'g', gram: 'g', kg: 'kg', kilogram: 'kg',
+    oz: 'oz', ounce: 'oz', lb: 'lb', pound: 'lb',
+    ml: 'ml', l: 'l', litre: 'l', liter: 'l',
+    cup: 'cup', tbsp: 'tbsp', tablespoon: 'tbsp', tsp: 'tsp', teaspoon: 'tsp',
+    fl_oz: 'fl_oz', pint: 'pint', quart: 'quart',
+  };
+  const resolved = ALIASES[unit];
+  if (!resolved) return null;
+  return resolved === 'g'
+    ? { quantity_g: amount }
+    : { quantity: amount, unit: resolved };
+}
+
 function currentRoute() {
   const hash = location.hash.replace(/^#\/?/, '').split('?')[0];
   return ROUTES.includes(hash) ? hash : 'dashboard';
@@ -118,6 +150,10 @@ export function app() {
     showNew: null,
     moreOpen: false,
     theme: storedTheme(),
+    // 'metric' | 'us'. Mirrors user_profile.units and is sent as ?units= on the
+    // read paths that quote quantities, so the server does the rendering and the
+    // two clients cannot disagree about what "3¾ cups" means.
+    units: 'metric',
 
     // exposed so the markup iterates data instead of repeating buttons
     PRIMARY,
@@ -146,6 +182,7 @@ export function app() {
     async bootstrap() {
       try {
         this.me = await api.get('/auth/me');
+        this.units = this.me?.profile?.units ?? 'metric';
         await Promise.all([this.loadTier(), this.loadInbox()]);
         await this.load(this.view);
       } catch (error) {
@@ -202,6 +239,31 @@ export function app() {
 
     title() { return TITLES[this.view] ?? 'Today'; },
 
+    async setUnits(units) {
+      const previous = this.units;
+      this.units = units;
+      const saved = await this.guard(() => api.patch('/profiles/me', { units }));
+      if (!saved) {
+        this.units = previous;
+        return;
+      }
+      if (this.me?.profile) this.me.profile.units = units;
+      this.say(units === 'us' ? 'Showing cups and ounces' : 'Showing grams');
+      await this.load(this.view);
+    },
+
+    /** The measurement, with its caveat, or null when there is nothing to add. */
+    measure(display) {
+      if (!display) return null;
+      const suffix = display.advise_weighing ? ' · weigh if you can' : '';
+      return display.text + suffix;
+    },
+
+    /** True when a rendering is a ±20% guess rather than a matched density. */
+    isGuess(display) {
+      return Boolean(display) && display.basis === 'kind_default';
+    },
+
     cycleTheme() {
       this.theme = THEMES[(THEMES.indexOf(this.theme) + 1) % THEMES.length];
       applyTheme(this.theme);
@@ -240,7 +302,7 @@ export function app() {
             api.get('/recipes/public?sort=stars&limit=20'),
           ]);
         } else if (view === 'inventory') {
-          this.items = await api.get('/inventory/items');
+          this.items = await api.get(`/inventory/items?units=${this.units}`);
         } else if (view === 'achievements') {
           this.achievements = await api.get('/gamification/achievements');
           await this.loadTier();
@@ -337,6 +399,13 @@ export function app() {
     async startProof() {
       const body = { ...this.forms.proof };
       if (!body.starter_id) delete body.starter_id;
+      // The field holds whatever scale the form is showing; send it under the
+      // matching name and let the server normalise. Sending 75 as Celsius is
+      // exactly the mistake the API refuses, so never guess here.
+      if (this.units === 'us') {
+        body.dough_temp_f = body.dough_temp_c;
+        delete body.dough_temp_c;
+      }
       const done = await this.guard(() => api.post('/proofing/sessions', body), 'Proof started');
       if (done) { this.showNew = null; await this.load('proofing'); }
     },
@@ -388,7 +457,8 @@ export function app() {
 
     // --- recipes -------------------------------------------------------
     async scale(recipe, doughWeight) {
-      this.scaled = await api.get(`/recipes/${recipe.id}/scale?dough_weight_g=${doughWeight}`)
+      this.scaled = await api
+        .get(`/recipes/${recipe.id}/scale?dough_weight_g=${doughWeight}&units=${this.units}`)
         .catch((error) => { this.fail(error); return null; });
       if (this.scaled) this.scaled.name = recipe.name;
     },
@@ -410,13 +480,27 @@ export function app() {
     },
 
     async buy(item) {
-      const grams = Number(prompt(`How many grams of ${item.name}?`, '10000'));
-      if (!grams) return;
+      // In US mode ask for the unit too, so a baker with a bag marked in pounds
+      // does not have to convert before they can record it.
+      const metric = this.units === 'metric';
+      const prompted = prompt(
+        metric
+          ? `How many grams of ${item.name}?`
+          : `How much ${item.name}? e.g. "5 lb", "10 cup", "2000 g"`,
+        metric ? '10000' : '5 lb',
+      );
+      if (!prompted) return;
+
+      const parsed = parseAmount(prompted);
+      if (!parsed) return this.say(`Could not read "${prompted}" as an amount`, true);
+      const body = { kind: 'purchase', ...parsed };
+
       const cost = Number(prompt('Cost per kg?', '2.00'));
       if (Number.isNaN(cost)) return;
+      body.unit_cost_per_kg = cost;
+
       await this.guard(
-        () => api.post(`/inventory/items/${item.id}/transactions`,
-          { kind: 'purchase', quantity_g: grams, unit_cost_per_kg: cost }),
+        () => api.post(`/inventory/items/${item.id}/transactions`, body),
         'Stock added',
       );
       await this.load('inventory');
@@ -500,6 +584,13 @@ export function app() {
     },
 
     money(value) { return value == null ? '—' : value.toFixed(2); },
+
+    /** Baker's percentage, trimmed. Recipes entered as amounts carry four
+     *  decimals so scaling stays exact; nobody wants to read 90.0563%. */
+    pct(value) {
+      if (value == null) return '';
+      return `${Math.round(value * 10) / 10}%`;
+    },
   };
 }
 

@@ -5,13 +5,14 @@ from collections.abc import Callable, Coroutine
 from typing import Annotated, Any
 
 import redis.asyncio as aioredis
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import get_session
 from app.models.user import User, UserRole
+from app.services.measurements import System
 from app.services.security import TokenError, decode_access_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -69,6 +70,30 @@ async def get_verified_user(user: CurrentUser) -> User:
 
 
 VerifiedUser = Annotated[User, Depends(get_verified_user)]
+
+
+async def get_units(
+    user: CurrentUser,
+    units: Annotated[System | None, Query(description="Override the profile default")] = None,
+) -> System:
+    """Which system to render quantities in: the query wins, else the profile.
+
+    A per-request override matters because recipes are shared. A recipe authored
+    by a baker who works in cups is read by one who works in grams, and the
+    reader's preference is the one that should win — with a way to ask for the
+    other without changing their account.
+    """
+    if units is not None:
+        return units
+    profile = user.profile
+    try:
+        return System(profile.units) if profile else System.metric
+    except ValueError:
+        # An unrecognised stored value must not break every read path.
+        return System.metric
+
+
+UnitsPref = Annotated[System, Depends(get_units)]
 
 _ROLE_RANK = {UserRole.user: 0, UserRole.moderator: 1, UserRole.admin: 2}
 

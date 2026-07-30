@@ -82,11 +82,13 @@ async def _provision_test_database() -> None:
     config.set_main_option("script_location", os.path.join(root, "migrations"))
     await asyncio.to_thread(command.upgrade, config, "head")
 
-    # `achievement` is preserved across truncations, so seed it once per session.
+    # Both catalogues are preserved across truncations, so seed them once here.
     from app.services.achievements import seed_catalogue
+    from app.services.measurements.catalogue import seed_measures
 
     async with get_session_factory()() as session:
         await seed_catalogue(session)
+        await seed_measures(session)
     await dispose_engine()
 
 
@@ -109,10 +111,10 @@ def test_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     security.reset_caches()
 
 
-# Reference data, not test data. `achievement` is a projection of the code
-# catalogue seeded once by `sdt seed-achievements`; wiping it would break the
-# foreign key from user_achievement and force a re-seed on every single test.
-PRESERVED_TABLES = {"alembic_version", "achievement"}
+# Reference data, not test data. Both of these are projections of code catalogues,
+# seeded once per session; wiping them would break the foreign keys from
+# user_achievement and user_ingredient_measure and force a re-seed per test.
+PRESERVED_TABLES = {"alembic_version", "achievement", "ingredient_measure"}
 
 # Built once per session — the schema does not change mid-run.
 _truncate_statement: str | None = None

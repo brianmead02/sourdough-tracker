@@ -372,13 +372,17 @@ async def test_suggested_feed_scales_the_ratio(client: AsyncClient, outbox: Outb
         headers=headers,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {
+    body = resp.json()
+    # Compare the quantities exactly, but by subset: the response also carries
+    # `*_display` renderings, and pinning the whole dict would mean every future
+    # additive field breaks this test rather than the contract it cares about.
+    assert {key: body[key] for key in ("starter_g", "flour_g", "water_g", "total_g")} == {
         "starter_g": 20.0,
         "flour_g": 100.0,
         "water_g": 100.0,
         "total_g": 220.0,
-        "hydration_pct": 100.0,
     }
+    assert body["hydration_pct"] == 100.0
 
 
 async def test_suggested_feed_requires_exactly_one_basis(

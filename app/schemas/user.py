@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.user import UserRole
 from app.schemas.validators import validate_timezone
+from app.services.measurements import System
 
 
 class PublicProfile(BaseModel):
@@ -30,6 +31,7 @@ class OwnProfile(BaseModel):
     avatar_object_key: str | None = None
     is_public: bool
     timezone: str
+    units: System
 
 
 class CurrentUserResponse(BaseModel):
@@ -56,6 +58,9 @@ class ProfileUpdate(BaseModel):
     bio: str | None = Field(default=None, max_length=500)
     is_public: bool | None = None
     timezone: str | None = None
+    units: System | None = None
+    """Which system quantities are rendered in by default. `?units=` overrides
+    it per request, so this is a preference rather than a mode."""
 
     @field_validator("timezone")
     @classmethod

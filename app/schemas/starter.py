@@ -7,6 +7,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.starter import Aroma, StarterState
+from app.schemas.measurement import MeasureDisplay
 from app.services.starters import ScheduleStatus
 
 # Shared bounds. Generous enough for a bakery, tight enough to reject nonsense
@@ -170,6 +171,10 @@ class SuggestedFeedResponse(BaseModel):
     water_g: float
     total_g: float
     hydration_pct: float
+    starter_display: MeasureDisplay | None = None
+    flour_display: MeasureDisplay | None = None
+    water_display: MeasureDisplay | None = None
+    """Starter has no volume rendering by design — it comes back in ounces."""
 
 
 class SuggestFeedRequest(BaseModel):

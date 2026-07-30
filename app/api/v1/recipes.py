@@ -10,9 +10,9 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, VerifiedUser
+from app.api.deps import CurrentUser, UnitsPref, VerifiedUser
 from app.db import get_session
-from app.models.recipe import Recipe, RecipeIngredient, RecipeStar
+from app.models.recipe import IngredientKind, Recipe, RecipeIngredient, RecipeStar
 from app.models.user import User, UserProfile
 from app.schemas.recipe import (
     IngredientInput,
@@ -21,10 +21,14 @@ from app.schemas.recipe import (
     RecipeResponse,
     RecipeUpdate,
     ScaledRecipeResponse,
+    uses_amounts,
 )
 from app.services import recipes as recipe_service
 from app.services.achievements import publish
 from app.services.events import DomainEvent
+from app.services.measurements import MeasurementError, resolve, to_grams
+from app.services.measurements import store as measure_store
+from app.services.measurements.present import display_for
 from app.services.xp import source_id_for
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
@@ -39,10 +43,52 @@ def _to_ingredients(recipe: Recipe) -> list[recipe_service.Ingredient]:
 def _replace_ingredients(recipe: Recipe, payload: list[IngredientInput]) -> None:
     recipe.ingredients = [
         RecipeIngredient(
-            name=item.name, kind=item.kind, percentage=item.percentage, sort_order=index
+            name=item.name, kind=item.kind, percentage=item.percentage or 0.0, sort_order=index
         )
         for index, item in enumerate(payload)
     ]
+
+
+async def _resolve_amounts(
+    db: AsyncSession, user_id: uuid.UUID, ingredients: list[IngredientInput]
+) -> None:
+    """Turn `amount` + `unit` into percentages, in place.
+
+    Only reached when the whole recipe was entered as quantities; the schema has
+    already rejected a mix. Converting here rather than in the validator is
+    forced by the data: densities live in the database and a Pydantic validator
+    has no session.
+
+    A refusal (a cup of salt, any volume of starter) becomes a 422 naming the
+    ingredient — this is a write, so unlike a read path there is nothing sensible
+    to fall back to.
+    """
+    overrides = await measure_store.load_overrides(db, user_id)
+    grams: list[tuple[IngredientKind, float]] = []
+
+    for item in ingredients:
+        assert item.amount is not None and item.unit is not None
+        density = resolve(item.name, item.kind, overrides)
+        try:
+            converted = to_grams(item.amount, item.unit, density)
+        except MeasurementError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"{item.name}: {exc}",
+            ) from exc
+        grams.append((item.kind, converted.value))
+
+    try:
+        percentages = recipe_service.to_percentages(grams)
+    except recipe_service.RecipeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+    for item, percentage in zip(ingredients, percentages, strict=True):
+        item.percentage = percentage
+        item.amount = None
+        item.unit = None
 
 
 async def _get_owned(recipe_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) -> Recipe:
@@ -79,6 +125,8 @@ async def _get_readable(recipe_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSessi
 async def create_recipe(
     payload: RecipeCreate, user: VerifiedUser, db: SessionDep
 ) -> RecipeResponse:
+    if uses_amounts(payload.ingredients):
+        await _resolve_amounts(db, user.id, payload.ingredients)
     recipe = Recipe(owner_id=user.id, **payload.model_dump(exclude={"ingredients"}))
     _replace_ingredients(recipe, payload.ingredients)
     db.add(recipe)
@@ -233,6 +281,7 @@ async def scale_recipe(
     recipe_id: uuid.UUID,
     user: CurrentUser,
     db: SessionDep,
+    units: UnitsPref,
     dough_weight_g: Annotated[float | None, Query(gt=0, le=100_000)] = None,
     flour_g: Annotated[float | None, Query(gt=0, le=100_000)] = None,
     loaf_count: Annotated[int, Query(ge=1, le=100)] = 1,
@@ -256,7 +305,15 @@ async def scale_recipe(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
 
-    return ScaledRecipeResponse(**asdict(scaled))
+    # The one screen where units genuinely matter: this is the list a baker reads
+    # while standing at the bench.
+    overrides = await measure_store.load_overrides(db, user.id)
+    response = ScaledRecipeResponse(**asdict(scaled))
+    for line in response.ingredients:
+        line.display = display_for(
+            line.grams, units, ingredient=line.name, kind=line.kind, overrides=overrides
+        )
+    return response
 
 
 # --- forking and stars ------------------------------------------------------

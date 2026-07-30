@@ -164,6 +164,9 @@ async def start_session(
     coeffs = fermentation.coefficients()
     vigour = await proof_service.estimate_starter_vigour(db, payload.starter_id, coeffs)
     assert payload.target_rise_pct is not None
+    # Both are Optional on the schema only because Pydantic cannot express
+    # "exactly one of dough_temp_c / dough_temp_f"; the validator guarantees one.
+    assert payload.dough_temp_c is not None
 
     prediction = proof_service.predict_from_start(
         started_at=started_at,

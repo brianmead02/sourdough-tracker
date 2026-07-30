@@ -71,7 +71,8 @@ Object.defineProperty(globalThis, 'indexedDB', {
   },
 });
 
-const { app, applyTheme, NAVIGABLE, PRIMARY, ROUTES, SECONDARY, TITLES } = await import('../js/app.js');
+const { app, applyTheme, NAVIGABLE, PRIMARY, parseAmount, ROUTES, SECONDARY, TITLES } =
+  await import('../js/app.js');
 const { queueWrite, drainQueue, pendingCount, clearQueue } = await import('../js/db.js');
 
 const reset = async () => { await clearQueue(); nextId = 0; };
@@ -257,4 +258,38 @@ test('applyTheme is idempotent and reversible', () => {
   assert.equal(document.documentElement.getAttribute('data-theme'), 'dark');
   applyTheme('auto');
   assert.equal(document.documentElement.getAttribute('data-theme'), null);
+});
+
+// --- amount parsing --------------------------------------------------------
+//
+// The one place a baker's typing becomes a stored quantity. A misread unit does
+// not show a wrong number, it saves one.
+
+test('a bare number is grams, matching the field it replaces', () => {
+  assert.deepEqual(parseAmount('10000'), { quantity_g: 10000 });
+  assert.deepEqual(parseAmount('12 g'), { quantity_g: 12 });
+  assert.deepEqual(parseAmount('  250  '), { quantity_g: 250 });
+});
+
+test('units are recognised however they are spelled', () => {
+  assert.deepEqual(parseAmount('5 lb'), { quantity: 5, unit: 'lb' });
+  assert.deepEqual(parseAmount('5 pounds'), { quantity: 5, unit: 'lb' });
+  assert.deepEqual(parseAmount('10 cups'), { quantity: 10, unit: 'cup' });
+  assert.deepEqual(parseAmount('2 Tablespoons'), { quantity: 2, unit: 'tbsp' });
+  assert.deepEqual(parseAmount('1.5 kg'), { quantity: 1.5, unit: 'kg' });
+  assert.deepEqual(parseAmount('3 fl oz'), { quantity: 3, unit: 'fl_oz' });
+});
+
+test('anything unreadable returns null rather than a guess', () => {
+  for (const bad of ['', '   ', 'abc', '7 furlongs', '-5 lb', '0 cup', 'lb', '1 2 cup']) {
+    assert.equal(parseAmount(bad), null, JSON.stringify(bad));
+  }
+});
+
+test('parseAmount never invents a unit the API does not have', () => {
+  const KNOWN = new Set(['kg', 'oz', 'lb', 'ml', 'l', 'cup', 'tbsp', 'tsp', 'fl_oz', 'pint', 'quart']);
+  for (const text of ['5 lb', '10 cups', '2 tsp', '1 quart', '3 pints', '4 litres']) {
+    const parsed = parseAmount(text);
+    if (parsed && parsed.unit) assert.ok(KNOWN.has(parsed.unit), `${text} -> ${parsed.unit}`);
+  }
 });

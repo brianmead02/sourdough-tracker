@@ -7,6 +7,8 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.inventory import ItemKind, TransactionKind
+from app.schemas.measurement import MeasureDisplay
+from app.services.measurements import Unit, UnitFamily, family
 
 Grams = Annotated[float, Field(gt=0, le=1_000_000)]
 CostPerKg = Annotated[float, Field(ge=0, le=10_000)]
@@ -37,6 +39,7 @@ class ItemResponse(BaseModel):
     created_at: datetime
     # Derived from the ledger, never stored.
     on_hand_g: float
+    on_hand_display: MeasureDisplay | None = None
     average_cost_per_kg: float | None
     stock_value: float | None
     is_low: bool
@@ -46,12 +49,29 @@ class TransactionCreate(BaseModel):
     kind: TransactionKind
     # Always a positive magnitude; the sign is decided by `kind`, so a client
     # cannot accidentally add stock by "consuming" a negative amount.
-    quantity_g: Grams
+    #
+    # Optional at the field level, required by the validator: a client may send
+    # grams, or an amount with a unit, and the route converts the latter using
+    # the item's own name to pick a density.
+    quantity_g: Grams | None = None
+    quantity: Annotated[float | None, Field(gt=0, le=1_000_000)] = None
+    unit: Unit | None = None
     unit_cost_per_kg: CostPerKg | None = None
     occurred_at: datetime | None = None
     note: str | None = Field(default=None, max_length=200)
     # Only meaningful for `adjust`: a stock count can go either way.
     decrease: bool = False
+
+    @model_validator(mode="after")
+    def _exactly_one_quantity(self) -> "TransactionCreate":
+        has_amount = self.quantity is not None
+        if has_amount != (self.unit is not None):
+            raise ValueError("quantity and unit must be given together")
+        if has_amount == (self.quantity_g is not None):
+            raise ValueError("give either quantity_g, or quantity with unit")
+        if self.unit is not None and family(self.unit) is UnitFamily.temperature:
+            raise ValueError("stock cannot be measured in degrees")
+        return self
 
     @model_validator(mode="after")
     def _cost_belongs_to_purchases(self) -> "TransactionCreate":

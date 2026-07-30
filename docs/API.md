@@ -1,6 +1,6 @@
 # API Reference
 
-96 endpoints under `/api/v1`. The live, always-accurate contract is the OpenAPI
+101 endpoints under `/api/v1`. The live, always-accurate contract is the OpenAPI
 schema — this document covers the **semantics that a schema cannot express**:
 which errors mean what, which operations are idempotent, and where a status code
 was chosen deliberately.
@@ -272,6 +272,110 @@ ready at 3am is ready at 3am. `GET /notifications/events` says which is which.
 
 **Stale reminders are dropped, not delivered late.** A "your dough is ready" six
 hours after the fact is wrong, not merely late.
+
+---
+
+## Measurements (5)
+
+Grams are the only mass this service stores and Celsius the only temperature.
+These exist so a client can offer cups, ounces, millilitres or Fahrenheit
+without any of it reaching the fermentation model, which reasons about mass.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/measurements/units` | Every unit and its exact ratio. No auth, no state — it is a table of physical constants. |
+| `GET` | `/measurements/ingredients` | The density catalogue with your own measurements merged in. `?kind=` filters. |
+| `POST` | `/measurements/convert` | A **batch** of conversions. See the refusal note below. |
+| `PUT` | `/measurements/ingredients/{slug}/override` | Record your own measured density. `409` if the ingredient refuses volume. |
+| `DELETE` | `/measurements/ingredients/{slug}/override` | Fall back to the published value. |
+
+**A refusal is a result, not an error.** `POST /convert` returns `200` even when
+an item cannot be converted; that item carries `value: null` and an `error`
+string. One unconvertible line in a batch of forty must not fail the other
+thirty-nine, and failing the request would push clients into sending items one
+at a time — the shape the batch exists to avoid.
+
+Two things refuse volume:
+
+- **Salt without a named variety.** A tablespoon of table salt is 18 g and a
+  tablespoon of Diamond Crystal is 8 g — a **2.25-fold** spread in the
+  ingredient that ruins a loaf fastest. Name the salt (`"diamond crystal"`,
+  `"morton kosher"`) and it converts; say `"salt"` and it will not guess.
+- **Starter, always.** A levain at peak is mostly gas, so its volume says
+  nothing about how much of it there is. No override can change this.
+
+### Reading quantities in your own units
+
+`user_profile.units` (`metric` | `us`) is the default; **`?units=`** overrides it
+per request, which matters because a recipe authored in cups is read by someone
+who works in grams.
+
+These paths gained a `display` **sibling** field — additive, so no existing
+field changed and no client breaks:
+
+| Path | Field |
+|---|---|
+| `GET /recipes/{id}/scale` | `ingredients[].display` |
+| `GET /inventory/items` | `on_hand_display` |
+| `POST /starters/{id}/suggested-feed` | `flour_display`, `water_display`, `starter_display` |
+
+```json
+{ "name": "bread flour", "grams": 451.7,
+  "display": { "text": "3¾ cups", "system": "us", "basis": "catalogue",
+               "approximate": true, "grams": 450.0, "drift_pct": -0.38,
+               "advise_weighing": false } }
+```
+
+`basis` is `exact` (mass↔mass, temperature), `catalogue`, `user_override`, or
+`kind_default` (a ±20% guess). **A client showing a `kind_default` should say
+so.** `grams` is what the text weighs if measured exactly as written, and
+`drift_pct` is how far that is from what was asked for — volume measurement does
+not round-trip, and the API states the error rather than hiding it.
+
+`advise_weighing` is set below ~15 g, where no spoon can be honest: 10 g of fine
+salt is 1.667 tsp and no set has a third of a teaspoon.
+
+### Writing quantities in your own units
+
+Three write paths accept non-metric input. In every case the conversion happens
+at the edge and **only grams and Celsius reach the database**.
+
+| Path | Alternative to |
+|---|---|
+| `POST`/`PATCH` `/recipes` — `ingredients[].amount` + `unit` | `percentage` |
+| `POST /inventory/items/{id}/transactions` — `quantity` + `unit` | `quantity_g` |
+| `POST /proofing/sessions`, `POST .../checks` — `dough_temp_f`, `ambient_temp_f` | `dough_temp_c`, `ambient_temp_c` |
+
+Each pair is **exactly one of**, enforced by a validator rather than left as two
+optional fields that could disagree. Sending both is a 422; sending neither is a
+422.
+
+**Recipes are all-or-nothing.** Give every ingredient a percentage, or every one
+an amount — a mix has no single reading, since it is unclear whether the
+percentage refers to the converted flour weight or was meant as a quantity.
+
+Amounts are converted and then turned into baker's percentages, which are
+relative to *total flour*, not total dough:
+
+```jsonc
+// in:  4 cups bread flour, 0.5 cup rye, 1.5 cups water, 2 tsp Diamond Crystal
+// out: 90.06%,             9.94%,       66.58%,         1.00%
+```
+
+**A refusal on a write is a 422**, not a fallback. Read paths render starter and
+unnamed salt in ounces because showing an imprecise number is a small harm;
+*storing* a wrong one is not, so the error names the ingredient:
+
+```
+422  levain: a levain at peak is mostly gas, so its volume says nothing
+     about how much of it there is; weigh it
+```
+
+**Fahrenheit is normalised in the schema**, so no route or service ever sees it,
+and the bounds are the Celsius ones converted (0–45 °C is 32–113 °F) rather than
+separately written. This closes a specific trap: `dough_temp_c` feeds the Q10
+fermentation model, and a baker typing `75` meaning Fahrenheit into the Celsius
+field gets a 422 rather than a proof prediction that is hours wrong.
 
 ---
 
