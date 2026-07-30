@@ -26,6 +26,15 @@ class AppState extends ChangeNotifier {
   CurrentUserResponse? me;
   TierResponse? tier;
 
+  /// 'metric' or 'us'. Mirrors user_profile.units.
+  ///
+  /// The server does the rendering — this only decides which scale the input
+  /// fields are labelled in, and which field name a temperature is sent under.
+  /// Converting here would put a second implementation of the maths in the app.
+  String units = 'metric';
+
+  bool get isUs => units == 'us';
+
   List<StarterListItem> starters = [];
   List<ScheduleItem> schedule = [];
   List<ActiveProofSession> activeProofs = [];
@@ -36,6 +45,21 @@ class AppState extends ChangeNotifier {
 
   Timer? _clock;
   DateTime now = DateTime.now().toUtc();
+
+  /// Save the preference. Optimistic, and rolled back if the server refuses.
+  Future<void> setUnits(String next) async {
+    final previous = units;
+    units = next;
+    notifyListeners();
+    try {
+      await api.patch('/profiles/me', {'units': next});
+      notice = next == 'us' ? 'Showing cups and ounces' : 'Showing grams';
+    } catch (e) {
+      units = previous;
+      error = '$e';
+    }
+    notifyListeners();
+  }
 
   Future<void> boot() async {
     await api.restoreSession();
@@ -131,6 +155,7 @@ class AppState extends ChangeNotifier {
     await api.logout();
     authed = false;
     me = null;
+    units = me?.profile.units ?? 'metric';
     tier = null;
     starters = [];
     schedule = [];

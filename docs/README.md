@@ -37,11 +37,11 @@ Open **http://localhost:8000** for the app, or `/docs` for the API.
 
 | | |
 |---|---|
-| Endpoints | 96 |
+| Endpoints | 101 |
 | Database tables | 28 |
 | Migrations | 7 |
 | Achievements | 44 across 19 metrics |
-| Tests | 205 unit + 217 integration + 20 browser-logic + 16 Dart |
+| Tests | 288 unit + 262 integration + 24 browser-logic + 16 Dart |
 | Lines of Python | ~15,600 including tests |
 | PWA payload | ~108 KB uncompressed, no build step |
 

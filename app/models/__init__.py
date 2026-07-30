@@ -21,6 +21,7 @@ from app.models.inventory import (
     ItemKind,
     TransactionKind,
 )
+from app.models.measurement import IngredientMeasureRow, UserIngredientMeasure
 from app.models.notification import (
     ChannelKind,
     DeliveryStatus,
@@ -70,6 +71,7 @@ __all__ = [
     "Feeding",
     "InAppNotification",
     "IngredientKind",
+    "IngredientMeasureRow",
     "InventoryItem",
     "InventoryTransaction",
     "ItemKind",
@@ -101,6 +103,7 @@ __all__ = [
     "UUIDPrimaryKey",
     "User",
     "UserAchievement",
+    "UserIngredientMeasure",
     "UserProfile",
     "UserRole",
     "XPEvent",

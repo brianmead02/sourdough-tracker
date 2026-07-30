@@ -66,6 +66,10 @@ class UserProfile(Base, Timestamped):
     # Opt-in visibility: a profile is private until the user publishes it.
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
+    units: Mapped[str] = mapped_column(
+        String(8), default="metric", server_default="metric", nullable=False
+    )
+    """'metric' or 'us'. Which system quantities are rendered in by default."""
 
     user: Mapped[User] = relationship(back_populates="profile")
 

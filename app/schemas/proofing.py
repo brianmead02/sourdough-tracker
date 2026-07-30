@@ -13,6 +13,7 @@ from app.models.proofing import (
     ProofStage,
     ProofStatus,
 )
+from app.services.measurements import c_to_f, f_to_c
 
 # Annotated aliases rather than shared Field() instances: a FieldInfo object
 # reused across models can be mutated during model construction.
@@ -22,20 +23,69 @@ RisePct = Annotated[float, Field(ge=0, le=500)]
 OptionalRisePct = Annotated[float | None, Field(ge=0, le=500)]
 AmbientTemp = Annotated[float | None, Field(ge=-20, le=60)]
 
+# The Fahrenheit bounds are the Celsius ones converted, not invented: 0-45 C is
+# 32-113 F, and -20-60 C is -4-140 F. Stating them separately would let the two
+# drift, so they are derived at import.
+_DOUGH_F_MIN, _DOUGH_F_MAX = c_to_f(0), c_to_f(45)
+_AMBIENT_F_MIN, _AMBIENT_F_MAX = c_to_f(-20), c_to_f(60)
+# exclude=True: these are input-only. The validator folds them into the Celsius
+# field and clears them, and routes spread the payload straight into the ORM
+# model — a leftover key there is a TypeError, not a silent mistake, but it is
+# still a key that should never have existed past validation.
+OptionalDoughTempF = Annotated[float | None, Field(ge=_DOUGH_F_MIN, le=_DOUGH_F_MAX, exclude=True)]
+OptionalAmbientTempF = Annotated[
+    float | None, Field(ge=_AMBIENT_F_MIN, le=_AMBIENT_F_MAX, exclude=True)
+]
+
+
+def _one_temperature(celsius: float | None, fahrenheit: float | None, field: str) -> float | None:
+    """Collapse a C/F pair to Celsius, refusing both at once.
+
+    Fahrenheit is normalised away *here*, in the schema, so no route or service
+    ever sees it. That matters more than it looks: `dough_temp_c` feeds the Q10
+    fermentation model, and a stray Fahrenheit value reaching it would not error,
+    it would just predict a wildly wrong proof.
+
+    Two separate fields rather than one value plus a `unit` discriminator,
+    because a range check that depends on a sibling field is exactly the kind of
+    validation that gets written once and quietly skipped afterwards.
+    """
+    if celsius is not None and fahrenheit is not None:
+        raise ValueError(f"give either {field}_c or {field}_f, not both")
+    if fahrenheit is not None:
+        return round(f_to_c(fahrenheit), 4)
+    return celsius
+
 
 class ProofSessionCreate(BaseModel):
     stage: ProofStage
     starter_id: uuid.UUID | None = None
     bake_id: uuid.UUID | None = None
     started_at: datetime | None = None
-    dough_temp_c: DoughTemp
+    # Optional at the field level, required by the validator below: exactly one
+    # of the C/F pair must arrive. Pydantic cannot express "one of these two".
+    dough_temp_c: OptionalDoughTemp = None
+    dough_temp_f: OptionalDoughTempF = None
     ambient_temp_c: AmbientTemp = None
+    ambient_temp_f: OptionalAmbientTempF = None
     starter_pct: float = Field(default=20.0, gt=0, le=100)
     hydration_pct: float | None = Field(default=None, ge=30, le=200)
     # Defaults to the stage's conventional target when omitted.
     target_rise_pct: OptionalRisePct = None
     planned_duration_minutes: int | None = Field(default=None, ge=1, le=10080)
     notes: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _normalise_temperatures(self) -> "ProofSessionCreate":
+        self.dough_temp_c = _one_temperature(self.dough_temp_c, self.dough_temp_f, "dough_temp")
+        self.ambient_temp_c = _one_temperature(
+            self.ambient_temp_c, self.ambient_temp_f, "ambient_temp"
+        )
+        if self.dough_temp_c is None:
+            raise ValueError("dough_temp_c or dough_temp_f is required")
+        self.dough_temp_f = None
+        self.ambient_temp_f = None
+        return self
 
     @model_validator(mode="after")
     def _apply_stage_defaults(self) -> "ProofSessionCreate":
@@ -51,8 +101,15 @@ class ProofCheckCreate(BaseModel):
     checked_at: datetime | None = None
     rise_pct: RisePct
     dough_temp_c: OptionalDoughTemp = None
+    dough_temp_f: OptionalDoughTempF = None
     poke_test: PokeTest | None = None
     notes: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _normalise_temperature(self) -> "ProofCheckCreate":
+        self.dough_temp_c = _one_temperature(self.dough_temp_c, self.dough_temp_f, "dough_temp")
+        self.dough_temp_f = None
+        return self
 
 
 class ProofCheckResponse(BaseModel):

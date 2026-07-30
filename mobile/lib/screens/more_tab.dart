@@ -32,6 +32,31 @@ class _MoreTabState extends State<MoreTab> {
       padding: const EdgeInsets.all(16),
       children: [
         Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Units', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text(
+                  'Everything is stored in grams either way, so switching '
+                  'never changes a recipe.',
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'metric', label: Text('Grams')),
+                    ButtonSegment(value: 'us', label: Text('Cups & oz')),
+                  ],
+                  selected: {state.units},
+                  onSelectionChanged: (chosen) => state.setUnits(chosen.first),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Card(
           child: ExpansionTile(
             title: const Text('Achievements'),
             subtitle: Text('$earned of ${state.achievements.length} earned'),

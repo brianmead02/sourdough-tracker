@@ -40,7 +40,11 @@ class ProofingTab extends StatelessWidget {
   Future<void> _startProof(BuildContext context) async {
     var stage = 'bulk';
     String? starterId;
-    final temp = TextEditingController(text: '24');
+    final isUs = state.isUs;
+    // The field holds whatever scale it is labelled in, and is sent under the
+    // matching name. The API refuses a Fahrenheit value in the Celsius field,
+    // so guessing here would turn a typo into a 422 rather than a bad proof.
+    final temp = TextEditingController(text: isUs ? '75' : '24');
     final starterPct = TextEditingController(text: '20');
 
     final go = await showModalBottomSheet<bool>(
@@ -80,9 +84,9 @@ class ProofingTab extends StatelessWidget {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Dough temperature',
-                  suffixText: 'C',
+                  suffixText: isUs ? 'F' : 'C',
                   helperText:
                       'The single biggest influence on how long this takes',
                 ),
@@ -133,7 +137,10 @@ class ProofingTab extends StatelessWidget {
     if (go == true) {
       await state.startProof({
         'stage': stage,
-        'dough_temp_c': double.tryParse(temp.text) ?? 24,
+        if (isUs)
+          'dough_temp_f': double.tryParse(temp.text) ?? 75
+        else
+          'dough_temp_c': double.tryParse(temp.text) ?? 24,
         'starter_pct': double.tryParse(starterPct.text) ?? 20,
         // Null-aware value: the entry is omitted when no starter was chosen.
         'starter_id': ?starterId,

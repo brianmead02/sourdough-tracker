@@ -63,7 +63,7 @@ indistinguishable from cheating.
 **Web app** — no build step, no `node_modules`; node is only for the tests:
 
 ```bash
-node --test web/test/app.test.mjs                 # 20 tests, browser globals stubbed
+node --test web/test/app.test.mjs                 # 24 tests, browser globals stubbed
 python scripts/check_contrast.py                  # WCAG AA on every declared pair
 python scripts/check_shell_size.py                # offline shell transfer budget
 ```
@@ -106,7 +106,7 @@ CI runs all of these, plus a Docker build.
 |---|---|---|---|
 | Python unit | 205 | ~1 s | Nothing — pure functions and static assets |
 | Python integration | 217 | ~65 s | Postgres, Redis, MinIO, ntfy |
-| Browser logic | 20 | <1 s | node, with browser globals stubbed |
+| Browser logic | 24 | <1 s | node, with browser globals stubbed |
 | Dart | 16 | ~2 s | `flutter test` |
 
 Integration tests are marked and **deselected by default** (`addopts = -m 'not

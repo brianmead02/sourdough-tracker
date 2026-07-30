@@ -10,10 +10,16 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, VerifiedUser
+from app.api.deps import CurrentUser, UnitsPref, VerifiedUser
 from app.db import get_session
 from app.models.bake import Bake
-from app.models.inventory import InventoryItem, InventoryTransaction, TransactionKind
+from app.models.inventory import (
+    InventoryItem,
+    InventoryTransaction,
+    ItemKind,
+    TransactionKind,
+)
+from app.models.recipe import IngredientKind
 from app.schemas.inventory import (
     CostReport,
     ItemCreate,
@@ -25,7 +31,18 @@ from app.schemas.inventory import (
 from app.services import inventory as inventory_service
 from app.services.achievements import publish
 from app.services.events import DomainEvent
+from app.services.measurements import MeasurementError, System, resolve, to_grams
+from app.services.measurements import store as measure_store
+from app.services.measurements.present import display_for
 from app.services.starters import CLOCK_SKEW_ALLOWANCE, MAX_BACKDATE
+
+# ItemKind and IngredientKind are separate enums with overlapping members;
+# `other` has no ingredient equivalent and falls through to a name-only lookup.
+_INGREDIENT_KINDS = {
+    ItemKind.flour: IngredientKind.flour,
+    ItemKind.salt: IngredientKind.salt,
+    ItemKind.inclusion: IngredientKind.inclusion,
+}
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
@@ -79,13 +96,39 @@ async def create_item(payload: ItemCreate, user: VerifiedUser, db: SessionDep) -
 
 
 @router.get("/items", response_model=list[ItemResponse])
-async def list_items(user: CurrentUser, db: SessionDep) -> list[ItemResponse]:
+async def list_items(user: CurrentUser, db: SessionDep, units: UnitsPref) -> list[ItemResponse]:
     result = await db.execute(
         select(InventoryItem)
         .where(InventoryItem.user_id == user.id, InventoryItem.deleted_at.is_(None))
         .order_by(InventoryItem.name)
     )
-    return await _to_responses(db, list(result.scalars().all()))
+    items = list(result.scalars().all())
+    responses = await _to_responses(db, items)
+    await _attach_displays(db, user.id, items, responses, units)
+    return responses
+
+
+async def _attach_displays(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    items: list[InventoryItem],
+    responses: list[ItemResponse],
+    units: System,
+) -> None:
+    """Render stock on hand in the caller's units.
+
+    `ItemKind` is not `IngredientKind`, so the name is what resolves the density —
+    the same string the bake-consumption matcher already relies on.
+    """
+    overrides = await measure_store.load_overrides(db, user_id)
+    for item, response in zip(items, responses, strict=True):
+        response.on_hand_display = display_for(
+            response.on_hand_g,
+            units,
+            ingredient=item.name,
+            kind=_INGREDIENT_KINDS.get(item.kind),
+            overrides=overrides,
+        )
 
 
 @router.get("/low-stock", response_model=list[ItemResponse])
@@ -231,16 +274,31 @@ async def add_transaction(
             detail=f"occurred_at cannot be more than {MAX_BACKDATE.days} days in the past",
         )
 
+    quantity_g = payload.quantity_g
+    if quantity_g is None:
+        # Volume entry: the item's own name picks the density, which is the same
+        # string bake consumption already matches on.
+        assert payload.quantity is not None and payload.unit is not None
+        overrides = await measure_store.load_overrides(db, user.id)
+        density = resolve(item.name, _INGREDIENT_KINDS.get(item.kind), overrides)
+        try:
+            quantity_g = to_grams(payload.quantity, payload.unit, density).value
+        except MeasurementError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"{item.name}: {exc}",
+            ) from exc
+
     if payload.kind is TransactionKind.purchase:
-        delta = payload.quantity_g
+        delta = quantity_g
         unit_cost = payload.unit_cost_per_kg
     elif payload.kind is TransactionKind.consume:
-        delta = -payload.quantity_g
+        delta = -quantity_g
         # Valued at the average paid, stamped now so later purchases cannot
         # retroactively change what this cost.
         unit_cost = await inventory_service.average_cost_per_kg(db, item.id)
     else:
-        delta = -payload.quantity_g if payload.decrease else payload.quantity_g
+        delta = -quantity_g if payload.decrease else quantity_g
         unit_cost = None
 
     transaction = InventoryTransaction(
