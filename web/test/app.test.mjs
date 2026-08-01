@@ -8,6 +8,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 // --- browser stubs ---------------------------------------------------------
@@ -292,4 +293,38 @@ test('parseAmount never invents a unit the API does not have', () => {
     const parsed = parseAmount(text);
     if (parsed && parsed.unit) assert.ok(KNOWN.has(parsed.unit), `${text} -> ${parsed.unit}`);
   }
+});
+
+// --- markup guards ---------------------------------------------------------
+
+const MARKUP = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+test('every <img> declares alt, width, height and loading', () => {
+  // Missing width/height is layout shift: the card jumps when the image lands.
+  // Missing alt is a screen reader reading out a filename. Neither shows up in
+  // a screenshot, so they are asserted rather than eyeballed.
+  const tags = MARKUP.match(/<img[\s\S]*?>/g) ?? [];
+  assert.ok(tags.length > 0, 'expected at least one <img>');
+  for (const tag of tags) {
+    for (const attr of ['alt', 'width', 'height', 'loading']) {
+      assert.ok(tag.includes(`${attr}=`), `${attr} missing from ${tag}`);
+    }
+  }
+});
+
+test('no image is precached in the service worker shell', () => {
+  // The shell is what a cold visitor downloads before the app renders. A
+  // sign-in illustration is not part of that, and the budget check only stays
+  // meaningful while this holds.
+  const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  const shell = sw.match(/const SHELL = \[(.*?)\];/s)?.[1] ?? '';
+  const images = [...shell.matchAll(/'([^']+\.(?:webp|png|jpe?g|avif))'/g)].map((m) => m[1]);
+  assert.deepEqual(images, [], `images in SHELL: ${images.join(', ')}`);
+});
+
+test('every <use> in the markup points at a symbol that exists', () => {
+  const symbols = new Set([...MARKUP.matchAll(/<symbol id="([^"]+)"/g)].map((m) => m[1]));
+  const refs = [...MARKUP.matchAll(/<use href="#([^"]+)"/g)].map((m) => m[1]);
+  const missing = refs.filter((r) => !symbols.has(r));
+  assert.deepEqual(missing, [], `unresolved icon reference(s): ${missing.join(', ')}`);
 });

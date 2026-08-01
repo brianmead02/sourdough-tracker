@@ -45,6 +45,34 @@
     <path d="M4 20V13"/><path d="M10 20V6"/><path d="M16 20v-9"/><path d="M22 20H2"/></symbol>
   <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M3 7h13"/><path d="M3 17h7"/><circle cx="19" cy="7" r="2.2"/><circle cx="14" cy="17" r="2.2"/></symbol>
+  <!-- Empty-state loaf. Redrawn rather than traced from the source JPEG: flat art
+       with a baked-in grey backdrop cannot sit on two themes, and a blend mode is
+       a patch rather than a fix. Everything here is currentColor at varying
+       opacity, so it takes the colour of whatever it is placed in. ~1.5 KB. -->
+  <symbol id="i-loaf-empty" viewBox="0 0 64 40">
+    <g fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round">
+      <!-- crust: a squat dome with a flat base -->
+      <path d="M6 31.5C6 17.4 15.6 9 32 9s26 8.4 26 22.5a1.5 1.5 0 0 1-1.5 1.5h-49A1.5 1.5 0 0 1 6 31.5Z"
+            fill-opacity=".22" stroke-opacity=".5" stroke-width="1.6"/>
+      <!-- scoring across the crown -->
+      <path d="M27 10.6c4.4 1.3 8.2 4.6 10.6 9.2" fill="none" stroke-opacity=".42" stroke-width="1.5"/>
+      <path d="M40.5 12.6c3.1 2 5.6 5 7.1 8.7" fill="none" stroke-opacity=".42" stroke-width="1.5"/>
+      <!-- the cut face, lighter than the crust -->
+      <ellipse cx="21" cy="21.2" rx="14.2" ry="10.9"
+               fill-opacity=".08" stroke-opacity=".5" stroke-width="1.6"/>
+      <!-- seeds: two on the crust, the rest through the crumb -->
+      <g fill-opacity=".5" stroke="none">
+        <ellipse cx="15.5" cy="17" rx="1.5" ry=".8" transform="rotate(-24 15.5 17)"/>
+        <ellipse cx="24" cy="15.8" rx="1.5" ry=".8" transform="rotate(14 24 15.8)"/>
+        <ellipse cx="19" cy="23.5" rx="1.5" ry=".8" transform="rotate(-8 19 23.5)"/>
+        <ellipse cx="27" cy="21.5" rx="1.5" ry=".8" transform="rotate(32 27 21.5)"/>
+        <ellipse cx="14" cy="26" rx="1.5" ry=".8" transform="rotate(18 14 26)"/>
+        <ellipse cx="24.5" cy="28" rx="1.5" ry=".8" transform="rotate(-30 24.5 28)"/>
+        <ellipse cx="46" cy="18" rx="1.5" ry=".8" transform="rotate(22 46 18)"/>
+        <ellipse cx="52" cy="24.5" rx="1.5" ry=".8" transform="rotate(-16 52 24.5)"/>
+      </g>
+    </g>
+  </symbol>
   <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
     <path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></symbol>
   <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -62,7 +90,11 @@
 <!-- ===================== not signed in ===================== -->
 <template x-if="ready && !authed">
   <div class="auth-shell">
-    <div class="logo" aria-hidden="true">🍞</div>
+    <!-- Lazily loaded and deliberately absent from the service worker SHELL: a
+         sign-in illustration is not what a cold visitor needs before the app
+         renders. width/height are set so nothing reflows when it arrives. -->
+    <img class="logo" src="/img/loaf-hero.webp" width="320" height="320"
+         loading="lazy" decoding="async" alt="">
     <h1>Sourdough Tracker</h1>
 
     <div class="card">
@@ -181,7 +213,7 @@
 
           <div class="section-title">Proofing now</div>
           <template x-if="proofs.length === 0">
-            <div class="empty">Nothing proofing. <button class="ghost small" @click="go('proofing')">Start a proof</button></div>
+            <div class="empty"><svg class="empty-mark" viewBox="0 0 64 40" aria-hidden="true"><use href="#i-loaf-empty"/></svg>Nothing proofing. <button class="ghost small" @click="go('proofing')">Start a proof</button></div>
           </template>
           <div class="grid-cards">
             <template x-for="p in proofs" :key="p.id">
@@ -206,7 +238,7 @@
 
           <div class="section-title">Starters due</div>
           <template x-if="schedule.filter(s => s.status !== 'ok').length === 0">
-            <div class="empty">Everything is fed. 🎉</div>
+            <div class="empty"><svg class="empty-mark" viewBox="0 0 64 40" aria-hidden="true"><use href="#i-loaf-empty"/></svg>Everything is fed. 🎉</div>
           </template>
           <div class="grid-cards">
             <template x-for="s in schedule.filter(s => s.status !== 'ok')" :key="s.starter_id">
@@ -247,7 +279,7 @@
           </div>
 
           <template x-if="starters.length === 0">
-            <div class="empty" style="margin-top:var(--sp-3)">No starters yet.</div>
+            <div class="empty" style="margin-top:var(--sp-3)"><svg class="empty-mark" viewBox="0 0 64 40" aria-hidden="true"><use href="#i-loaf-empty"/></svg>No starters yet.</div>
           </template>
           <div class="grid-cards" style="margin-top:var(--sp-3)">
             <template x-for="s in starters" :key="s.id">
@@ -302,7 +334,7 @@
           </div>
 
           <div class="section-title">Running</div>
-          <template x-if="proofs.length === 0"><div class="empty">Nothing proofing.</div></template>
+          <template x-if="proofs.length === 0"><div class="empty"><svg class="empty-mark" viewBox="0 0 64 40" aria-hidden="true"><use href="#i-loaf-empty"/></svg>Nothing proofing.</div></template>
           <div class="grid-cards">
             <template x-for="p in proofs" :key="p.id">
               <div class="card">
@@ -359,7 +391,7 @@
             </form>
           </div>
 
-          <template x-if="bakes.length === 0"><div class="empty" style="margin-top:var(--sp-3)">No bakes yet.</div></template>
+          <template x-if="bakes.length === 0"><div class="empty" style="margin-top:var(--sp-3)"><svg class="empty-mark" viewBox="0 0 64 40" aria-hidden="true"><use href="#i-loaf-empty"/></svg>No bakes yet.</div></template>
           <div class="grid-cards" style="margin-top:var(--sp-3)">
             <template x-for="b in bakes" :key="b.id">
               <div class="card">
@@ -411,7 +443,7 @@
           </div>
 
           <div class="section-title">Mine</div>
-          <template x-if="recipes.length === 0"><div class="empty">No recipes yet.</div></template>
+          <template x-if="recipes.length === 0"><div class="empty"><svg class="empty-mark" viewBox="0 0 64 40" aria-hidden="true"><use href="#i-loaf-empty"/></svg>No recipes yet.</div></template>
           <div class="grid-cards">
             <template x-for="r in recipes" :key="r.id">
               <div class="card">
@@ -462,7 +494,7 @@
           </div>
 
           <template x-if="items.length === 0">
-            <div class="empty" style="margin-top:var(--sp-3)">No stock tracked yet. Add flour here and
+            <div class="empty" style="margin-top:var(--sp-3)"><svg class="empty-mark" viewBox="0 0 64 40" aria-hidden="true"><use href="#i-loaf-empty"/></svg>No stock tracked yet. Add flour here and
               finishing a bake will draw it down and cost the loaves.</div>
           </template>
           <div class="grid-cards" style="margin-top:var(--sp-3)">

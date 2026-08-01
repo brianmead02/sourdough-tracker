@@ -63,7 +63,7 @@ indistinguishable from cheating.
 **Web app** — no build step, no `node_modules`; node is only for the tests:
 
 ```bash
-node --test web/test/app.test.mjs                 # 24 tests, browser globals stubbed
+node --test web/test/app.test.mjs                 # 27 tests, browser globals stubbed
 python scripts/check_contrast.py                  # WCAG AA on every declared pair
 python scripts/check_shell_size.py                # offline shell transfer budget
 ```
@@ -82,6 +82,16 @@ Changing the vendored font is a deliberate act, not an edit:
 pip install fonttools brotli
 python scripts/build_font.py            # download, subset, write web/vendor/
 python scripts/build_font.py --check    # verify the committed file is reproducible
+```
+
+So is changing an image. Sources live in `images/`; nothing reads them at
+runtime. `web/img/` holds the WebP the app actually serves, and the crop
+coordinates live in the `Asset` record so a framing decision is reviewable:
+
+```bash
+pip install pillow
+python scripts/build_images.py          # crop, resize, write web/img/
+python scripts/build_images.py --check  # verify the committed files are reproducible
 ```
 
 **Bump `VERSION` in `web/sw.js` after any change under `web/`.** The shell is
@@ -104,9 +114,9 @@ CI runs all of these, plus a Docker build.
 
 | Layer | Count | Speed | Touches |
 |---|---|---|---|
-| Python unit | 205 | ~1 s | Nothing — pure functions and static assets |
-| Python integration | 217 | ~65 s | Postgres, Redis, MinIO, ntfy |
-| Browser logic | 24 | <1 s | node, with browser globals stubbed |
+| Python unit | 288 | ~3 s | Nothing — pure functions and static assets |
+| Python integration | 262 | ~75 s | Postgres, Redis, MinIO, ntfy |
+| Browser logic | 27 | <1 s | node, with browser globals stubbed |
 | Dart | 16 | ~2 s | `flutter test` |
 
 Integration tests are marked and **deselected by default** (`addopts = -m 'not
@@ -170,8 +180,9 @@ app/           FastAPI service
   worker/      Background tasks and the beat schedule
 web/           The PWA — no build step, Alpine vendored in web/vendor/
 mobile/        Flutter Android app; lib/api/models.dart is generated
-scripts/       build_font.py, check_contrast.py, check_shell_size.py,
-               generate_dart_models.py, backup.sh, loadtest.py
+scripts/       build_font.py, build_images.py, check_contrast.py,
+               check_shell_size.py, generate_dart_models.py, backup.sh,
+               loadtest.py
 tests/         Python tests (integration ones are marked)
 ```
 

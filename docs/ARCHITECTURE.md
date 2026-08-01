@@ -472,7 +472,7 @@ eta  = target_rise_fraction / rate
 |---|---|---|
 | Unit | 288 | Nothing — pure functions and static assets |
 | Integration | 262 | Live Postgres, Redis, MinIO and ntfy |
-| Browser logic | 24 | node, with browser globals stubbed |
+| Browser logic | 27 | node, with browser globals stubbed |
 | Dart | 16 | `flutter test`, plus `flutter analyze` and a real APK build |
 
 Integration tests are marked and deselected by default (`pytest -m integration`

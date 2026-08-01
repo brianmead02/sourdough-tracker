@@ -75,11 +75,13 @@ def _mount_pwa(app: FastAPI) -> None:
         logger.info("no web/ directory found; serving API only")
         return
 
-    # StaticFiles guesses content types via the stdlib `mimetypes`, which has no
-    # entry for .woff2 on several platforms — the vendored font then goes out as
-    # application/octet-stream. Browsers sniff it and render anyway, but it logs a
-    # preload type mismatch and stops intermediaries treating it as a font.
+    # StaticFiles guesses content types via the stdlib `mimetypes`, which knows
+    # neither of these on several platforms — the vendored font and images then go
+    # out as application/octet-stream. Browsers sniff and render them anyway, but
+    # it logs a preload type mismatch and stops intermediaries caching them as what
+    # they are.
     mimetypes.add_type("font/woff2", ".woff2")
+    mimetypes.add_type("image/webp", ".webp")
 
     @app.get("/sw.js", include_in_schema=False)
     async def service_worker() -> FileResponse:

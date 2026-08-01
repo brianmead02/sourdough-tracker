@@ -7,7 +7,7 @@
 //
 // The version string is what invalidates the shell. Bump it on deploy.
 
-const VERSION = 'v4';
+const VERSION = 'v5';
 const SHELL_CACHE = `sourdough-shell-${VERSION}`;
 const DATA_CACHE = `sourdough-data-${VERSION}`;
 
