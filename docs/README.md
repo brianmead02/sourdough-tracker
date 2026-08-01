@@ -41,7 +41,7 @@ Open **http://localhost:8000** for the app, or `/docs` for the API.
 | Database tables | 28 |
 | Migrations | 7 |
 | Achievements | 44 across 19 metrics |
-| Tests | 288 unit + 262 integration + 24 browser-logic + 16 Dart |
+| Tests | 288 unit + 262 integration + 27 browser-logic + 16 Dart |
 | Lines of Python | ~15,600 including tests |
 | PWA payload | ~108 KB uncompressed, no build step |
 

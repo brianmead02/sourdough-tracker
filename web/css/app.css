@@ -392,6 +392,17 @@ main {
 }
 .section-title:first-child { margin-top: 0; }
 
+/* The loaf that heads every empty state. Drawn in currentColor, so it takes the
+ * colour of the text it sits above and needs no second asset for dark mode. */
+.empty-mark {
+  display: block;
+  width: 72px;
+  height: 45px;
+  margin: 0 auto var(--sp-2);
+  color: var(--muted);
+  opacity: 0.85;
+}
+
 /* Capped to the card column: an empty state spanning the full pane while the
  * cards beside it sit at 480px reads as a different kind of thing. */
 .empty {
@@ -623,7 +634,22 @@ label {
 /* --- auth --------------------------------------------------------------- */
 
 .auth-shell { max-width: 400px; margin: 7vh auto; padding: var(--sp-4); }
-.auth-shell .logo { font-size: 2.8rem; text-align: center; }
+
+/* Three tabs do not fit 400px, and the shared .tabs rule scrolls them - which is
+ * right for the six leaderboard categories and wrong here, where it puts a
+ * scrollbar through the middle of the sign-in card. Wrap instead. */
+.auth-shell .tabs { flex-wrap: wrap; overflow: visible; }
+/* Circular crop rather than the full square: it drops most of the photograph's
+ * own background, which is what would otherwise fight the page. */
+.auth-shell .logo {
+  display: block;
+  width: 132px;
+  height: 132px;
+  margin: 0 auto var(--sp-3);
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 6px 22px rgb(43 33 25 / 14%);
+}
 .auth-shell h1 {
   text-align: center;
   font-size: var(--fs-xl);
